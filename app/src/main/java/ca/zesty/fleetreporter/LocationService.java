@@ -35,6 +35,11 @@ public class LocationService extends Service implements LocationListener {
     private static final long LOCATION_INTERVAL_MILLIS = 5000; // 5 seconds
     private static final long RECORDING_INTERVAL_MILLIS = 10000; // 10 seconds
     private static final long REPORTING_INTERVAL_MILLIS = 60000; // 1 minute
+    private static final SimpleDateFormat RFC3339_UTC =
+        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+    static {
+        RFC3339_UTC.setTimeZone(TimeZone.getTimeZone("UTC"));
+    }
 
     private boolean mStarted = false;
     private PowerManager.WakeLock mWakeLock = null;
@@ -117,22 +122,20 @@ public class LocationService extends Service implements LocationListener {
         Log.i(TAG, "sendReport: " + mNumReports);
     }
 
-    /** Formats a location into a text message. */
+    /** Formats a location into a string of at most 60 characters. */
     private String formatSms(Location location) {
-        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'");
-        format.setTimeZone(TimeZone.getTimeZone("UTC"));
         if (location == null) {
-            return format.format(new Date()) + ";null";
+            return RFC3339_UTC.format(new Date()) + ";null";
         }
-        return String.format(Locale.US, "%s;%.5f;%.5f;%d;%d;%d;%d",
-            format.format(new Date()),
-            location.getLatitude(),  // degrees
-            location.getLongitude(),  // degrees
-            (int) Math.round(location.getAltitude()),  // meters
-            (int) Math.round(location.getSpeed() * 3.6),  // km/h
-            (int) Math.round(location.getBearing()),  // degrees
-            (int) Math.round(location.getAccuracy())  // meters
-        );
+        return String.format(Locale.US, "%s;%+.5f;%+.5f;%+d;%d;%d;%d",
+            RFC3339_UTC.format(new Date()).substring(0, 20),
+            Utils.clamp(-90, 90, location.getLatitude()),  // degrees
+            Utils.clamp(-180, 180, location.getLongitude()),  // degrees
+            Utils.clamp(-9999, 9999, Math.round(location.getAltitude())),  // meters
+            Utils.clamp(0, 999, Math.round(location.getSpeed() * 3.6)),  // km/h
+            Utils.clamp(0, 360, Math.round(location.getBearing())) % 360,  // degrees
+            Utils.clamp(0, 9999, Math.round(location.getAccuracy()))  // meters
+        );  // length <= 20 + 1 + 9 + 1 + 10 + 1 + 5 + 1 + 3 + 1 + 3 + 1 + 4 = 60
     }
 
     /** Sends an SMS message. */
