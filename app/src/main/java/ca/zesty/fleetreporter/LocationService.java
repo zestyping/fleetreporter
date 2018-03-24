@@ -1,11 +1,14 @@
 package ca.zesty.fleetreporter;
 
+import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.location.LocationManager;
 import android.os.Handler;
 import android.os.IBinder;
@@ -61,8 +64,10 @@ public class LocationService extends Service implements LocationFixListener {
     private static final long TRANSMIT_INTERVAL_MILLIS = 30 * SECOND;
     private static final int LOCATION_FIXES_PER_MESSAGE = 2;
     private static final int MAX_OUTBOX_SIZE = 48;
-    private static final String EXTRA_FIXES_SENT = "FIXES_SENT";
+    private static final String ACTION_SMS_SENT_STATUS = "SMS_SENT_STATUS";
+    private static final String EXTRA_SENT_KEYS = "SENT_KEYS";
 
+    private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
     private boolean mStarted = false;
     private PowerManager.WakeLock mWakeLock = null;
     private MotionListener mMotionListener;
@@ -80,6 +85,15 @@ public class LocationService extends Service implements LocationFixListener {
             return b > a ? 1 : b < a ? -1 : 0;
         }
     });
+
+    @Override public void onCreate() {
+        super.onCreate();
+
+        // Receive broadcasts of SMS sent notifications.
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ACTION_SMS_SENT_STATUS);
+        registerReceiver(mSmsStatusReceiver, filter);
+    }
 
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -107,15 +121,23 @@ public class LocationService extends Service implements LocationFixListener {
             };
             mHandler.postDelayed(mRunnable, 0);
         }
-        if (intent.hasExtra(EXTRA_FIXES_SENT)) {  // confirmation that SMS was sent
-            for (long fixTime : intent.getLongArrayExtra(EXTRA_FIXES_SENT)) {
-                Log.i(TAG, "sent " + fixTime + "; removing from outbox");
-                mNumSent += 1;
-                mOutbox.remove(fixTime);
-            }
-            getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
-        }
         return START_STICKY;
+    }
+
+    class SmsStatusReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (getResultCode() == Activity.RESULT_OK &&
+                intent.hasExtra(EXTRA_SENT_KEYS)) {  // confirmation that SMS was sent
+                for (long fixTime : intent.getLongArrayExtra(EXTRA_SENT_KEYS)) {
+                    Log.i(TAG, "sent " + fixTime + "; removing from outbox");
+                    mNumSent += 1;
+                    mOutbox.remove(fixTime);
+                }
+                getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
+            } else {
+                Log.i(TAG, "failed to send SMS message");
+            }
+        }
     }
 
     /** Creates the notification to show while the service is running. */
@@ -199,10 +221,10 @@ public class LocationService extends Service implements LocationFixListener {
             if (sentKeys.size() >= LOCATION_FIXES_PER_MESSAGE) break;
         }
         Log.i(TAG, "transmitLocationFixes: sending " + TextUtils.join(", ", sentKeys));
-        Intent intent = new Intent(this, LocationService.class);
-        intent.putExtra(EXTRA_FIXES_SENT, sentKeys.toArray());
-        sendSms(DESTINATION_NUMBER, message, PendingIntent.getService(
-            this, 0, intent, PendingIntent.FLAG_NO_CREATE));
+        Intent intent = new Intent(ACTION_SMS_SENT_STATUS);
+        intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
+        sendSms(DESTINATION_NUMBER, message, PendingIntent.getBroadcast(
+            this, 0, intent, PendingIntent.FLAG_ONE_SHOT));
     }
 
     /** Sends an SMS message. */
@@ -222,6 +244,7 @@ public class LocationService extends Service implements LocationFixListener {
     @Override public void onDestroy() {
         mHandler.removeCallbacks(mRunnable);
         getLocationManager().removeUpdates(mMotionListener);
+        unregisterReceiver(mSmsStatusReceiver);
         if (mWakeLock != null) mWakeLock.release();
         mStarted = false;
     }
