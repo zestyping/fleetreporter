@@ -1,6 +1,10 @@
 package ca.zesty.fleetreporter;
 
 public class Utils {
+    public static String plural(long count, String singular, String plural) {
+        return (count == 1) ? singular : plural;
+    }
+
     public static String plural(long count) {
         return (count == 1) ? "" : "s";
     }
