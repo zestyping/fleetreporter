@@ -87,7 +87,7 @@ public class LocationFix {
 
     public String toString() {
         return String.format(
-            Locale.US, "<%s: lat=%.4f, lon=%.4f, alt=%.0f, %.1f m/s at %.0f, sd=%.0f, %s>",
+            Locale.US, "<%s: (%+.4f, %+.4f, %+.0f m), %.1f m/s brg %.0f, sd=%.0f m, %s>",
             RFC3339_UTC.format(new Date(fixTime * 1000)),
             latitude, longitude, altitude, speed, bearing, latLonSd,
             isResting() ?
