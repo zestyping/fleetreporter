@@ -58,7 +58,7 @@ public class LocationService extends Service implements LocationFixListener {
 
     private static final long SECOND = 1000;  // millis
     private static final long MINUTE = 60 * SECOND;  // millis
-    private static final long LOCATION_INTERVAL_MILLIS = 5 * SECOND;
+    private static final long LOCATION_INTERVAL_MILLIS = 10 * SECOND;
     private static final long CHECK_INTERVAL_MILLIS = 10 * SECOND;
     private static final long RECORDING_INTERVAL_MILLIS = 10 * MINUTE;
     private static final long TRANSMIT_INTERVAL_MILLIS = 30 * SECOND;
@@ -72,7 +72,6 @@ public class LocationService extends Service implements LocationFixListener {
     private PowerManager.WakeLock mWakeLock = null;
     private MotionListener mMotionListener;
     private LocationFix mLastFix = null;
-    private boolean mLastRecordedResting = false;
     private Handler mHandler = null;
     private Runnable mRunnable = null;
     private long mClockOffset = 0;  // GPS time minus System.currentTimeMillis()
@@ -170,7 +169,7 @@ public class LocationService extends Service implements LocationFixListener {
     public void onLocationFix(LocationFix fix) {
         // The phone's clock could be off.  But whenever we get a Location,
         // we can estimate the offset between the phone's clock and GPS time.
-        mClockOffset = fix.fixTime * 1000 - System.currentTimeMillis();
+        mClockOffset = fix.timeSeconds* 1000 - System.currentTimeMillis();
         Log.i(TAG, "onLocationFix: " + fix + " (clock offset " + mClockOffset + ")");
         mLastFix = fix;
         checkWhetherToRecordLocationFix();
@@ -181,21 +180,20 @@ public class LocationService extends Service implements LocationFixListener {
         if (mLastFix != null) {
             // Wait until when we're next scheduled to record, or record the fix
             // immediately if we've just transitioned between resting and moving.
-            if (mLastRecordedResting != mLastFix.isResting() ||
-                getGpsTimeMillis() >= mNextRecordMillis) {
+            if (mLastFix.isSegmentEnd || getGpsTimeMillis() >= mNextRecordMillis) {
                 recordLocationFix(mLastFix);
-                mLastRecordedResting = mLastFix.isResting();
                 // We want RECORDING_INTERVAL_MILLIS to be the maximum interval
                 // between fix times, so schedule the next time based on the
                 // time elapsed after the fix time, not elapsed after now.
                 mNextRecordMillis = mLastFix.getMillis() + RECORDING_INTERVAL_MILLIS;
+                mLastFix = null;
             }
         }
     }
 
     /** Records a location fix in the outbox, to be sent out over SMS. */
     private void recordLocationFix(LocationFix fix) {
-        mOutbox.put(fix.fixTime, fix);
+        mOutbox.put(fix.timeSeconds, fix);
         Log.i(TAG, "recordLocationFix: " + fix + " (" + mOutbox.size() + " queued)");
         mNumRecorded += 1;
         limitOutboxSize();

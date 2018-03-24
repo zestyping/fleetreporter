@@ -20,8 +20,8 @@ public class MotionListener implements LocationListener {
     // enough to zero (< STABLE_MAX_SPEED).
     //
     // The MotionListener decides that the GPS receiver is "resting" if all
-    // the Location readings have been stable and close together (within
-    // STABLE_MAX_DISTANCE) for a period of time (STABLE_MIN_MILLIS).
+    // the Location readings for a period of time (STABLE_MIN_MILLIS) have
+    // been stable and close together (within STABLE_MAX_DISTANCE).
 
     private static final double STABLE_MAX_ACCURACY = 25.0;  // meters
     private static final double STABLE_MAX_SPEED = 2.0;  // meters per second
@@ -29,7 +29,7 @@ public class MotionListener implements LocationListener {
     private static final double STABLE_MAX_DISTANCE = 10.0;  // meters
 
     private long mStableStartMillis = -1;  // >= 0 iff the last Location was stable
-    private Location mStableLoc = null;  // non-null iff the last Location was stable
+    private Location mStableLoc = null;  // last stable Location
 
     private long mRestingStartMillis = -1;  // >= 0 means our state is "resting"
     private long mMovingStartMillis = -1;  // >= 0 means our state is "moving"
@@ -55,29 +55,36 @@ public class MotionListener implements LocationListener {
             }
             mStableLoc.setTime(loc.getTime());  // use the up-to-date fix time
         } else {
-            mStableLoc = null;
             mStableStartMillis = -1;
         }
 
         // Decide if we are resting or moving, based on how long we've been stable.
+        LocationFix fix = null;
         if (mStableLoc != null && loc.getTime() - mStableStartMillis > STABLE_MIN_MILLIS) {
-            if (mRestingStartMillis < 0) {
+            if (mRestingStartMillis < 0) {  // transition to resting
+                if (mMovingStartMillis >= 0) {
+                    fix = LocationFix.createMovingEnd(loc, mMovingStartMillis / 1000);
+                }
                 mRestingStartMillis = loc.getTime();
                 mMovingStartMillis = -1;
             }
         } else {
-            if (mMovingStartMillis < 0) {
+            if (mMovingStartMillis < 0) {  // transition to moving
+                if (mRestingStartMillis >= 0 && mStableLoc != null) {
+                    fix = LocationFix.createRestingEnd(mStableLoc, mRestingStartMillis / 1000);
+                }
                 mRestingStartMillis = -1;
                 mMovingStartMillis = loc.getTime();
             }
         }
 
         // Emit a resting or moving LocationFix.
-        mTarget.onLocationFix(
-            mRestingStartMillis >= 0 ?
-            LocationFix.createResting(mStableLoc, mRestingStartMillis / 1000) :
-            LocationFix.createMoving(loc, mMovingStartMillis / 1000)
-        );
+        if (fix == null) {
+            fix = mRestingStartMillis >= 0 ?
+                LocationFix.createResting(mStableLoc, mRestingStartMillis / 1000) :
+                LocationFix.createMoving(loc, mMovingStartMillis / 1000);
+        }
+        mTarget.onLocationFix(fix);
     }
 
     @Override public void onStatusChanged(String provider, int status, Bundle extras) { }
