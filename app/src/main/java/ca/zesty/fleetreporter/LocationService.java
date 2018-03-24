@@ -176,6 +176,7 @@ public class LocationService extends Service implements LocationFixListener {
         mOutbox.put(fix.fixTime, fix);
         Log.i(TAG, "recordLocationFix: " + fix + " (" + mOutbox.size() + " queued)");
         mNumRecorded += 1;
+        limitOutboxSize();
         checkWhetherToTransmitLocationFixes();
         getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
     }
@@ -208,6 +209,13 @@ public class LocationService extends Service implements LocationFixListener {
     private void sendSms(String destination, String message, PendingIntent sentIntent) {
         Log.i(TAG, "SMS to " + destination + ": " + message);
         getSmsManager().sendTextMessage(destination, null, message, sentIntent, null);
+    }
+
+    /** Ensure the outbox contains no more than MAX_OUTBOX_SIZE entries. */
+    private void limitOutboxSize() {
+        while (mOutbox.size() > MAX_OUTBOX_SIZE) {
+            mOutbox.remove(mOutbox.lastKey());
+        }
     }
 
     /** Cleans up when the service is about to stop. */
