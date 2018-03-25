@@ -61,7 +61,7 @@ public class MotionListener implements LocationListener {
         // Decide if we need to transition to resting or moving.
         LocationFix fix = null;
         if (mStableStartMillis != null && mStableLocation != null &&
-            timeMillis - mStableStartMillis > STABLE_MIN_MILLIS) {
+            timeMillis - mStableStartMillis >= STABLE_MIN_MILLIS) {
             if (mRestingStartMillis == null) {  // transition to resting
                 // The resting segment actually started a little bit in the past,
                 // at mStableStartMillis; indicate that motion ended at that time.
@@ -89,7 +89,10 @@ public class MotionListener implements LocationListener {
             fix = LocationFix.createResting(timeMillis, mStableLocation, mRestingStartMillis);
         }
         if (fix == null && mMovingStartMillis != null) {
-            fix = LocationFix.createMoving(timeMillis, loc, mMovingStartMillis);
+            // Emit a moving LocationFix only if we're not waiting to stabilize.
+            if (mStableStartMillis == null || timeMillis == mStableStartMillis) {
+                fix = LocationFix.createMoving(timeMillis, loc, mMovingStartMillis);
+            }
         }
 
         // Emit the LocationFix.

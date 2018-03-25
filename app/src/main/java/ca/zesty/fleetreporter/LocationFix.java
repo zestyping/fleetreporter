@@ -88,17 +88,21 @@ public class LocationFix {
         return create(timeMillis, loc, movingStartMillis, false, true);
     }
 
-    public boolean equals(LocationFix other) {
-        return timeMillis == other.timeMillis &&
-            latitude == other.latitude &&
-            longitude == other.longitude &&
-            altitude == other.altitude &&
-            speed == other.speed &&
-            bearing == other.bearing &&
-            latLonSd == other.latLonSd &&
-            segmentStartMillis == other.segmentStartMillis &&
-            isResting == other.isResting &&
-            isSegmentEnd == other.isSegmentEnd;
+    public boolean equals(Object otherObject) {
+        if (otherObject instanceof LocationFix) {
+            LocationFix other = (LocationFix) otherObject;
+            return timeMillis == other.timeMillis &&
+                latitude == other.latitude &&
+                longitude == other.longitude &&
+                altitude == other.altitude &&
+                speed == other.speed &&
+                bearing == other.bearing &&
+                latLonSd == other.latLonSd &&
+                segmentStartMillis == other.segmentStartMillis &&
+                isResting == other.isResting &&
+                isSegmentEnd == other.isSegmentEnd;
+        }
+        return false;
     }
 
     public long getSeconds() {
