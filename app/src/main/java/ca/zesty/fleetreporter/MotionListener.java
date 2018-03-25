@@ -23,7 +23,7 @@ public class MotionListener implements LocationListener {
     // the Location readings for a period of time (STABLE_MIN_MILLIS) have
     // been stable and close together (within STABLE_MAX_DISTANCE).
 
-    private static final double STABLE_MAX_ACCURACY = 25.0;  // meters
+    private static final double STABLE_MAX_ACCURACY = 50.0;  // meters
     private static final double STABLE_MAX_SPEED = 2.0;  // meters per second
     private static final long STABLE_MIN_MILLIS = 60000;  // one minute
     private static final double STABLE_MAX_DISTANCE = 10.0;  // meters
@@ -63,7 +63,7 @@ public class MotionListener implements LocationListener {
         if (mStableLoc != null && loc.getTime() - mStableStartMillis > STABLE_MIN_MILLIS) {
             if (mRestingStartMillis < 0) {  // transition to resting
                 if (mMovingStartMillis >= 0) {
-                    fix = LocationFix.createMovingEnd(loc, mMovingStartMillis / 1000);
+                    fix = LocationFix.createMovingEnd(loc, mMovingStartMillis);
                 }
                 mRestingStartMillis = loc.getTime();
                 mMovingStartMillis = -1;
@@ -71,7 +71,7 @@ public class MotionListener implements LocationListener {
         } else {
             if (mMovingStartMillis < 0) {  // transition to moving
                 if (mRestingStartMillis >= 0 && mStableLoc != null) {
-                    fix = LocationFix.createRestingEnd(mStableLoc, mRestingStartMillis / 1000);
+                    fix = LocationFix.createRestingEnd(mStableLoc, mRestingStartMillis);
                 }
                 mRestingStartMillis = -1;
                 mMovingStartMillis = loc.getTime();
@@ -81,8 +81,8 @@ public class MotionListener implements LocationListener {
         // Emit a resting or moving LocationFix.
         if (fix == null) {
             fix = mRestingStartMillis >= 0 ?
-                LocationFix.createResting(mStableLoc, mRestingStartMillis / 1000) :
-                LocationFix.createMoving(loc, mMovingStartMillis / 1000);
+                LocationFix.createResting(mStableLoc, mRestingStartMillis) :
+                LocationFix.createMoving(loc, mMovingStartMillis);
         }
         mTarget.onLocationFix(fix);
     }

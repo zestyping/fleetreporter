@@ -169,7 +169,7 @@ public class LocationService extends Service implements LocationFixListener {
     public void onLocationFix(LocationFix fix) {
         // The phone's clock could be off.  But whenever we get a Location,
         // we can estimate the offset between the phone's clock and GPS time.
-        mClockOffset = fix.timeSeconds* 1000 - System.currentTimeMillis();
+        mClockOffset = fix.timeMillis - System.currentTimeMillis();
         Log.i(TAG, "onLocationFix: " + fix + " (clock offset " + mClockOffset + ")");
         mLastFix = fix;
         checkWhetherToRecordLocationFix();
@@ -185,7 +185,7 @@ public class LocationService extends Service implements LocationFixListener {
                 // We want RECORDING_INTERVAL_MILLIS to be the maximum interval
                 // between fix times, so schedule the next time based on the
                 // time elapsed after the fix time, not elapsed after now.
-                mNextRecordMillis = mLastFix.getMillis() + RECORDING_INTERVAL_MILLIS;
+                mNextRecordMillis = mLastFix.timeMillis + RECORDING_INTERVAL_MILLIS;
                 mLastFix = null;
             }
         }
@@ -193,7 +193,7 @@ public class LocationService extends Service implements LocationFixListener {
 
     /** Records a location fix in the outbox, to be sent out over SMS. */
     private void recordLocationFix(LocationFix fix) {
-        mOutbox.put(fix.timeSeconds, fix);
+        mOutbox.put(fix.getSeconds(), fix);
         Log.i(TAG, "recordLocationFix: " + fix + " (" + mOutbox.size() + " queued)");
         mNumRecorded += 1;
         limitOutboxSize();
@@ -214,7 +214,7 @@ public class LocationService extends Service implements LocationFixListener {
         String message = "";
         List<Long> sentKeys = new ArrayList<>();
         for (Long key : mOutbox.keySet()) {
-            message += mOutbox.get(key).format() + " ";
+            message += mOutbox.get(key).format() + "\n";
             sentKeys.add(key);
             if (sentKeys.size() >= LOCATION_FIXES_PER_MESSAGE) break;
         }
