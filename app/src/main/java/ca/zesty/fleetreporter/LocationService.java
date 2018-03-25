@@ -221,7 +221,8 @@ public class LocationService extends Service implements LocationFixListener {
             sentKeys.add(key);
             if (sentKeys.size() >= LOCATION_FIXES_PER_MESSAGE) break;
         }
-        Log.i(TAG, "transmitLocationFixes: sending " + TextUtils.join(", ", sentKeys));
+        Log.i(TAG, "transmitLocationFixes: " + mOutbox.size() + " in queue; " +
+                   "sending " + TextUtils.join(", ", sentKeys));
         Intent intent = new Intent(ACTION_FLEET_TRACKER_SMS_SENT);
         intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
         sendSms(DESTINATION_NUMBER, message.trim(), PendingIntent.getBroadcast(

@@ -58,14 +58,18 @@ public class MotionListener implements LocationListener {
             mStableStartMillis = -1;
         }
 
-        // Decide if we are resting or moving, based on how long we've been stable.
+        // Decide if we need to transition to resting or moving.
         LocationFix fix = null;
         if (mStableLoc != null && loc.getTime() - mStableStartMillis > STABLE_MIN_MILLIS) {
             if (mRestingStartMillis < 0) {  // transition to resting
+                // The resting segment actually started a little bit in the past,
+                // at mStableStartMillis; indicate that motion ended at that time.
                 if (mMovingStartMillis >= 0) {
-                    fix = LocationFix.createMovingEnd(loc, mMovingStartMillis);
+                    Location movingEndLoc = new Location(mStableLoc);
+                    movingEndLoc.setTime(mStableStartMillis);
+                    fix = LocationFix.createMovingEnd(movingEndLoc, mMovingStartMillis);
                 }
-                mRestingStartMillis = loc.getTime();
+                mRestingStartMillis = mStableStartMillis;
                 mMovingStartMillis = -1;
             }
         } else {
@@ -78,12 +82,15 @@ public class MotionListener implements LocationListener {
             }
         }
 
-        // Emit a resting or moving LocationFix.
+        // If we haven't created a special LocationFix for a transition, make
+        // a normal resting or moving LocationFix.
         if (fix == null) {
             fix = mRestingStartMillis >= 0 ?
                 LocationFix.createResting(mStableLoc, mRestingStartMillis) :
                 LocationFix.createMoving(loc, mMovingStartMillis);
         }
+
+        // Emit the LocationFix.
         mTarget.onLocationFix(fix);
     }
 
