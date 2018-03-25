@@ -56,12 +56,10 @@ public class LocationService extends Service implements LocationFixListener {
     private static final int NOTIFICATION_ID = 1;
     private static final String DESTINATION_NUMBER = "+15103978793";
 
-    private static final long SECOND = 1000;  // millis
-    private static final long MINUTE = 60 * SECOND;  // millis
-    private static final long LOCATION_INTERVAL_MILLIS = 10 * SECOND;
-    private static final long CHECK_INTERVAL_MILLIS = 10 * SECOND;
-    private static final long RECORDING_INTERVAL_MILLIS = 10 * MINUTE;
-    private static final long TRANSMIT_INTERVAL_MILLIS = 30 * SECOND;
+    private static final long LOCATION_INTERVAL_MILLIS = 10 * 1000;
+    private static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
+    private static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
+    private static final long TRANSMIT_INTERVAL_MILLIS = 30 * 1000;
     private static final int LOCATION_FIXES_PER_MESSAGE = 2;
     private static final int MAX_OUTBOX_SIZE = 48;
     private static final String ACTION_SMS_SENT_STATUS = "SMS_SENT_STATUS";
@@ -221,7 +219,7 @@ public class LocationService extends Service implements LocationFixListener {
         Log.i(TAG, "transmitLocationFixes: sending " + TextUtils.join(", ", sentKeys));
         Intent intent = new Intent(ACTION_SMS_SENT_STATUS);
         intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
-        sendSms(DESTINATION_NUMBER, message, PendingIntent.getBroadcast(
+        sendSms(DESTINATION_NUMBER, message.trim(), PendingIntent.getBroadcast(
             this, 0, intent, PendingIntent.FLAG_ONE_SHOT));
     }
 

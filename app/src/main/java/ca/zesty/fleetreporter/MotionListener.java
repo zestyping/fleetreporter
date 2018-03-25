@@ -25,8 +25,8 @@ public class MotionListener implements LocationListener {
 
     private static final double STABLE_MAX_ACCURACY = 50.0;  // meters
     private static final double STABLE_MAX_SPEED = 2.0;  // meters per second
-    private static final long STABLE_MIN_MILLIS = 60000;  // one minute
-    private static final double STABLE_MAX_DISTANCE = 10.0;  // meters
+    private static final long STABLE_MIN_MILLIS = 60 * 1000;  // one minute
+    private static final double STABLE_MAX_DISTANCE = 20.0;  // meters
 
     private long mStableStartMillis = -1;  // >= 0 iff the last Location was stable
     private Location mStableLoc = null;  // last stable Location

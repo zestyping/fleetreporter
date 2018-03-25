@@ -83,7 +83,7 @@ public class LocationFix {
     /** Formats a location fix for readability and debugging. */
     public String toString() {
         return String.format(
-            Locale.US, "<%s: (%+.4f, %+.4f, %+.0f m), %.1f m/s brg %.0f, sd=%.0f m, %s %d s%s>",
+            Locale.US, "<%s: (%+.5f, %+.5f, %+.0f m), %.1f m/s brg %.0f, sd=%.0f m, %s %d s%s>",
             RFC3339_UTC.format(new Date(timeMillis)),
             latitude, longitude, altitude, speed, bearing, latLonSd,
             isResting ? "resting" : "moving",
