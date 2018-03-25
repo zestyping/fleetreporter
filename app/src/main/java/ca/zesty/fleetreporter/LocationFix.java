@@ -117,7 +117,7 @@ public class LocationFix {
         );
     }
 
-    /** Formats a location fix into a string of at most 67 characters. */
+    /** Formats a location fix into a string of at most 68 characters. */
     public String format() {
         return String.format(Locale.US, "%s;%+.5f;%+.5f;%+d;%d;%d;%d;%d%s",
             RFC3339_UTC.format(new Date(timeMillis)).substring(0, 20),
@@ -127,8 +127,8 @@ public class LocationFix {
             Utils.clamp(0, 999, Math.round(speed * 3.6)),  // km/h, 3 chars
             Utils.clamp(0, 360, Math.round(bearing)) % 360,  // degrees, 3 chars
             Utils.clamp(0, 9999, Math.round(latLonSd)),  // meters, 4 chars
-            Utils.clamp(0, 9999, (timeMillis - segmentStartMillis) / 60000),  // minutes, 4 chars
+            Utils.clamp(0, 99999, (timeMillis - segmentStartMillis) / 1000),  // seconds, 5 chars
             isSegmentEnd ? (isResting ? "RM" : "MR") : (isResting ? "R" : "M")  // 2 chars
-        );  // length <= 20 + 9 + 10 + 5 + 3 + 3 + 4 + 4 + 2 + 7 separators = 67
+        );  // length <= 20 + 9 + 10 + 5 + 3 + 3 + 4 + 4 + 2 + 7 separators = 68
     }
 }
