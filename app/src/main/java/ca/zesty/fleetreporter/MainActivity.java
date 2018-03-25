@@ -20,6 +20,7 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        setTitle("Fleet Reporter " + BuildConfig.VERSION_NAME);
 
         ActivityCompat.requestPermissions(this, new String[] {
             Manifest.permission.ACCESS_FINE_LOCATION,
