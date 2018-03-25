@@ -62,7 +62,7 @@ public class LocationService extends Service implements LocationFixListener {
     private static final long TRANSMIT_INTERVAL_MILLIS = 30 * 1000;
     private static final int LOCATION_FIXES_PER_MESSAGE = 2;
     private static final int MAX_OUTBOX_SIZE = 48;
-    private static final String ACTION_FLEET_TRACKER_SMS_SENT = "FLEET_TRACKER_SMS_SENT";
+    private static final String ACTION_FLEET_REPORTER_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
     private static final String EXTRA_SENT_KEYS = "SENT_KEYS";
 
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
@@ -88,7 +88,7 @@ public class LocationService extends Service implements LocationFixListener {
 
         // Receive broadcasts of SMS sent notifications.
         IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_FLEET_TRACKER_SMS_SENT);
+        filter.addAction(ACTION_FLEET_REPORTER_SMS_SENT);
         registerReceiver(mSmsStatusReceiver, filter);
     }
 
@@ -199,7 +199,7 @@ public class LocationService extends Service implements LocationFixListener {
         getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
 
         // Show the location fix in the app's text box.
-        Intent intent = new Intent(MainActivity.ACTION_FLEET_TRACKER_LOG_MESSAGE);
+        Intent intent = new Intent(MainActivity.ACTION_FLEET_REPORTER_LOG_MESSAGE);
         intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE, fix.format());
         sendBroadcast(intent);
     }
@@ -223,7 +223,7 @@ public class LocationService extends Service implements LocationFixListener {
         }
         Log.i(TAG, "transmitLocationFixes: " + mOutbox.size() + " in queue; " +
                    "sending " + TextUtils.join(", ", sentKeys));
-        Intent intent = new Intent(ACTION_FLEET_TRACKER_SMS_SENT);
+        Intent intent = new Intent(ACTION_FLEET_REPORTER_SMS_SENT);
         intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
         sendSms(DESTINATION_NUMBER, message.trim(), PendingIntent.getBroadcast(
             this, 0, intent, PendingIntent.FLAG_ONE_SHOT));

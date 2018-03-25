@@ -12,7 +12,7 @@ import android.view.View;
 import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity {
-    public static final String ACTION_FLEET_TRACKER_LOG_MESSAGE = "FLEET_TRACKER_LOG_MESSAGE";
+    public static final String ACTION_FLEET_REPORTER_LOG_MESSAGE = "FLEET_REPORTER_LOG_MESSAGE";
     public static final String EXTRA_LOG_MESSAGE = "LOG_MESSAGE";
     private LogMessageReceiver mLogMessageReceiver = new LogMessageReceiver();
 
@@ -49,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
         );
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_FLEET_TRACKER_LOG_MESSAGE);
+        filter.addAction(ACTION_FLEET_REPORTER_LOG_MESSAGE);
         registerReceiver(mLogMessageReceiver, filter);
     }
 
