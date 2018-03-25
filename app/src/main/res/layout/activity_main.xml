@@ -11,16 +11,30 @@
     android:paddingTop="@dimen/activity_vertical_margin"
     tools:context="ca.zesty.fleetreporter.MainActivity">
 
-  <Button
-      android:id="@+id/start_button"
-      android:layout_width="match_parent"
-      android:layout_height="wrap_content"
-      android:text="Start tracking" />
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
 
-  <Button
-      android:id="@+id/stop_button"
-      android:layout_width="match_parent"
-      android:layout_height="wrap_content"
-      android:text="Stop tracking" />
+    <Button
+        android:id="@+id/start_button"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:text="Start" />
 
+    <Button
+        android:id="@+id/stop_button"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:text="Stop" />
+  </LinearLayout>
+
+  <TextView
+      android:id="@+id/message_log"
+      android:layout_width="match_parent"
+      android:layout_height="fill_parent"
+      android:fontFamily="monospace"
+      android:textSize="9dp" />
 </LinearLayout>

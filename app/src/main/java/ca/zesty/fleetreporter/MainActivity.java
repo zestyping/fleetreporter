@@ -1,15 +1,22 @@
 package ca.zesty.fleetreporter;
 
 import android.Manifest;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
+import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    public static final String ACTION_FLEET_TRACKER_LOG_MESSAGE = "FLEET_TRACKER_LOG_MESSAGE";
+    public static final String EXTRA_LOG_MESSAGE = "LOG_MESSAGE";
+    private LogMessageReceiver mLogMessageReceiver = new LogMessageReceiver();
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -40,5 +47,23 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         );
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ACTION_FLEET_TRACKER_LOG_MESSAGE);
+        registerReceiver(mLogMessageReceiver, filter);
+    }
+
+    @Override protected void onDestroy() {
+        unregisterReceiver(mLogMessageReceiver);
+        super.onDestroy();
+    }
+
+    class LogMessageReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (intent.hasExtra(EXTRA_LOG_MESSAGE)) {
+                String message = intent.getStringExtra(EXTRA_LOG_MESSAGE);
+                ((TextView) findViewById(R.id.message_log)).append(message + "\n");
+            }
+        }
     }
 }

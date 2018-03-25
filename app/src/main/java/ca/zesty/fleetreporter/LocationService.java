@@ -62,7 +62,7 @@ public class LocationService extends Service implements LocationFixListener {
     private static final long TRANSMIT_INTERVAL_MILLIS = 30 * 1000;
     private static final int LOCATION_FIXES_PER_MESSAGE = 2;
     private static final int MAX_OUTBOX_SIZE = 48;
-    private static final String ACTION_SMS_SENT_STATUS = "SMS_SENT_STATUS";
+    private static final String ACTION_FLEET_TRACKER_SMS_SENT = "FLEET_TRACKER_SMS_SENT";
     private static final String EXTRA_SENT_KEYS = "SENT_KEYS";
 
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
@@ -88,7 +88,7 @@ public class LocationService extends Service implements LocationFixListener {
 
         // Receive broadcasts of SMS sent notifications.
         IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_SMS_SENT_STATUS);
+        filter.addAction(ACTION_FLEET_TRACKER_SMS_SENT);
         registerReceiver(mSmsStatusReceiver, filter);
     }
 
@@ -197,6 +197,11 @@ public class LocationService extends Service implements LocationFixListener {
         limitOutboxSize();
         checkWhetherToTransmitLocationFixes();
         getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
+
+        // Show the location fix in the app's text box.
+        Intent intent = new Intent(MainActivity.ACTION_FLEET_TRACKER_LOG_MESSAGE);
+        intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE, fix.format());
+        sendBroadcast(intent);
     }
 
     /** Transmits location fixes in the outbox, if it's not too soon to do so. */
@@ -217,7 +222,7 @@ public class LocationService extends Service implements LocationFixListener {
             if (sentKeys.size() >= LOCATION_FIXES_PER_MESSAGE) break;
         }
         Log.i(TAG, "transmitLocationFixes: sending " + TextUtils.join(", ", sentKeys));
-        Intent intent = new Intent(ACTION_SMS_SENT_STATUS);
+        Intent intent = new Intent(ACTION_FLEET_TRACKER_SMS_SENT);
         intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
         sendSms(DESTINATION_NUMBER, message.trim(), PendingIntent.getBroadcast(
             this, 0, intent, PendingIntent.FLAG_ONE_SHOT));
