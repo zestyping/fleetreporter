@@ -10,11 +10,19 @@ import java.util.TimeZone;
 /** A data class for location fixes as stored and transmitted.
 
     Each fix is either a resting fix or a moving fix, as indicated by isResting.
-    A "segment" is a period of time of continuous rest or continuous movement;
-    segmentStartMillis is always less than or equal to timeMillis, and it
-    indicates how long the unit has been in its current resting or moving state.
-    isSegmentEnd indicates that the fix is at the end of a segment, that is,
-    a transition from resting to moving or from moving to resting.
+    A "segment" is a period of time of continuous rest or continuous movement,
+    which extends from segmentStartMillis to timeMillis (it is always the case
+    that segmentStartMillis <= timeMillis).  isSegmentEnd indicates that the fix
+    is at the end of a segment, at a transition between resting and moving.
+
+    The semantics of the times in a LocationFix are as follows:
+      - All timestamps are in GPS time.
+      - As sent to the server, the timestamp is precise only to whole seconds.
+      - The timestamp in whole seconds is to be treated as a unique key.
+      - A fix with a given timestamp overrides any fixes previously received by
+        the server with the same timestamp.
+      - A fix with a resting segment overrides any fixes previously received by
+        the server that have timestamps within that segment.
  */
 public class LocationFix {
     private static final SimpleDateFormat RFC3339_UTC;
@@ -24,15 +32,15 @@ public class LocationFix {
     }
 
     public final long timeMillis;  // ms since 1970-01-01 00:00:00 UTC
-    public final long segmentStartMillis;  // ms since 1970-01-01 00:00:00 UTC
-    public final boolean isResting;
-    public final boolean isSegmentEnd;
     public final double latitude;  // degrees
     public final double longitude;  // degrees
     public final double altitude;  // meters
     public final double speed;  // meters per second
     public final double bearing;  // degrees
     public final double latLonSd;  // 68% confidence radius of lat/lon position, meters
+    public final long segmentStartMillis;  // ms since 1970-01-01 00:00:00 UTC
+    public final boolean isResting;  // whether the segment is resting or moving
+    public final boolean isSegmentEnd;  // whether at a transition between resting and moving
 
     private LocationFix(
         long timeMillis, double latitude, double longitude, double altitude,
@@ -51,9 +59,8 @@ public class LocationFix {
         this.isSegmentEnd = isSegmentEnd;
     }
 
-    public static LocationFix create(
-        long timeMillis, Location loc, long segmentStartMillis,
-        boolean isResting, boolean isSegmentEnd) {
+    public static LocationFix create(long timeMillis, Location loc,
+        long segmentStartMillis, boolean isResting, boolean isSegmentEnd) {
         return new LocationFix(
             timeMillis, loc.getLatitude(), loc.getLongitude(), loc.getAltitude(),
             loc.getSpeed(), loc.getBearing(), loc.getAccuracy(),
@@ -61,20 +68,37 @@ public class LocationFix {
         );
     }
 
-    public static LocationFix createResting(long timeMillis, Location loc, long restingStartMillis) {
+    public static LocationFix createResting(
+        long timeMillis, Location loc, long restingStartMillis) {
         return create(timeMillis, loc, restingStartMillis, true, false);
     }
 
-    public static LocationFix createRestingEnd(long timeMillis, Location loc, long restingStartMillis) {
+    public static LocationFix createRestingEnd(
+        long timeMillis, Location loc, long restingStartMillis) {
         return create(timeMillis, loc, restingStartMillis, true, true);
     }
 
-    public static LocationFix createMoving(long timeMillis, Location loc, long movingStartMillis) {
+    public static LocationFix createMoving(
+        long timeMillis, Location loc, long movingStartMillis) {
         return create(timeMillis, loc, movingStartMillis, false, false);
     }
 
-    public static LocationFix createMovingEnd(long timeMillis, Location loc, long movingStartMillis) {
+    public static LocationFix createMovingEnd(
+        long timeMillis, Location loc, long movingStartMillis) {
         return create(timeMillis, loc, movingStartMillis, false, true);
+    }
+
+    public boolean equals(LocationFix other) {
+        return timeMillis == other.timeMillis &&
+            latitude == other.latitude &&
+            longitude == other.longitude &&
+            altitude == other.altitude &&
+            speed == other.speed &&
+            bearing == other.bearing &&
+            latLonSd == other.latLonSd &&
+            segmentStartMillis == other.segmentStartMillis &&
+            isResting == other.isResting &&
+            isSegmentEnd == other.isSegmentEnd;
     }
 
     public long getSeconds() {

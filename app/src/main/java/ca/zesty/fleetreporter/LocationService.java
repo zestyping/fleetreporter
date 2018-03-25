@@ -26,32 +26,33 @@ import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-/**
- * A foreground service that records the device's GPS location and periodically
- * reports it via SMS to the Fleet Map device.  Each location fix passes
- * through the following stages on the way to becoming an outgoing text message.
- *
- * LocationManager
- *     |
- *     |   mMotionListener.onLocation() (~ once every LOCATION_INTERVAL_MILLIS)
- *     |       LOCATION_INTERVAL_MILLIS should be short enough that we can
- *     |       quickly detect when the device starts or stops moving.
- *     v
- * mLastFix (the latest location fix)
- *     |
- *     |   recordLocationFix() (~ once every RECORDING_INTERVAL_MILLIS)
- *     |       RECORDING_INTERVAL_MILLIS is the length of time between fixes
- *     |       that will be recorded as a track or plotted on a map.
- *     v
- * mOutbox (the queue of all location fixes yet to be sent by SMS)
- *     |
- *     |   transmitLocationFixes() (~ once every TRANSMIT_INTERVAL_MILLIS)
- *     |       TRANSMIT_INTERVAL_MILLIS should be long enough to receive an
- *     |       SMS delivery acknowledgement before attempting to retransmit,
- *     |       and shorter than MotionListener.STABLE_MIN_MILLIS to ensure
- *     |       that the message sending rate keeps up with the generation rate.
- *     v
- * SmsManager.sendTextMessage()
+/** A foreground service that records the device's GPS location and periodically
+    reports it via SMS to the Fleet Map device.
+
+    Each LocationFix passes through the following stages on the way to becoming
+    an outgoing message to the server:
+   
+    LocationManager
+        |
+        |   mMotionListener.onLocation() (~ once every LOCATION_INTERVAL_MILLIS)
+        |       LOCATION_INTERVAL_MILLIS should be short enough that we can
+        |       quickly detect when the device starts or stops moving.
+        v
+    mLastFix (the latest location fix)
+        |
+        |   recordLocationFix() (~ once every RECORDING_INTERVAL_MILLIS)
+        |       RECORDING_INTERVAL_MILLIS is the length of time between fixes
+        |       that will be recorded as a track or plotted on a map.
+        v
+    mOutbox (the queue of all location fixes yet to be sent by SMS)
+        |
+        |   transmitLocationFixes() (~ once every TRANSMIT_INTERVAL_MILLIS)
+        |       TRANSMIT_INTERVAL_MILLIS should be long enough to receive an
+        |       SMS delivery acknowledgement before attempting to retransmit,
+        |       and shorter than MotionListener.STABLE_MIN_MILLIS to ensure
+        |       that the message sending rate keeps up with the generation rate.
+        v
+    SmsManager.sendTextMessage()
  */
 public class LocationService extends Service implements LocationFixListener {
     private static final String TAG = "LocationService";
@@ -167,8 +168,10 @@ public class LocationService extends Service implements LocationFixListener {
 
     /** Receives a new LocationFix from the MotionListener. */
     public void onLocationFix(LocationFix fix) {
-        // The phone's clock could be off.  But whenever we get a Location,
-        // we can estimate the offset between the phone's clock and GPS time.
+        // The phone's clock could be inaccurate.  Whenever we get a Location,
+        // we can estimate the offset between the phone's clock and GPS time,
+        // and this allows us to use estimated GPS time for all stored times and
+        // for scheduling all timed actions (see all uses of getGpsTimeMillis()).
         mClockOffset = fix.timeMillis - System.currentTimeMillis();
         Log.i(TAG, "onLocationFix: " + fix + " (clock offset " + mClockOffset + ")");
         mLastFix = fix;
@@ -178,13 +181,13 @@ public class LocationService extends Service implements LocationFixListener {
     /** Examines the last acquired fix, and moves it to the outbox if necessary. */
     private void checkWhetherToRecordLocationFix() {
         if (mLastFix != null) {
-            // Wait until when we're next scheduled to record, or record the fix
-            // immediately if we've just transitioned between resting and moving.
+            // If we've just transitioned between resting and moving, record the
+            // fix immediately; otherwise wait until we're next scheduled to record.
             if (mLastFix.isSegmentEnd || getGpsTimeMillis() >= mNextRecordMillis) {
                 recordLocationFix(mLastFix);
                 // We want RECORDING_INTERVAL_MILLIS to be the maximum interval
                 // between fix times, so schedule the next time based on the
-                // time elapsed after the fix time, not elapsed after now.
+                // time elapsed after the fix time, not time elapsed after now.
                 mNextRecordMillis = mLastFix.timeMillis + RECORDING_INTERVAL_MILLIS;
                 mLastFix = null;
             }
