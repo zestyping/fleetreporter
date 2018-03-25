@@ -52,28 +52,29 @@ public class LocationFix {
     }
 
     public static LocationFix create(
-        Location loc, long segmentStartMillis, boolean isResting, boolean isSegmentEnd) {
+        long timeMillis, Location loc, long segmentStartMillis,
+        boolean isResting, boolean isSegmentEnd) {
         return new LocationFix(
-            loc.getTime(), loc.getLatitude(), loc.getLongitude(), loc.getAltitude(),
+            timeMillis, loc.getLatitude(), loc.getLongitude(), loc.getAltitude(),
             loc.getSpeed(), loc.getBearing(), loc.getAccuracy(),
             segmentStartMillis, isResting, isSegmentEnd
         );
     }
 
-    public static LocationFix createResting(Location loc, long restingStartMillis) {
-        return create(loc, restingStartMillis, true, false);
+    public static LocationFix createResting(long timeMillis, Location loc, long restingStartMillis) {
+        return create(timeMillis, loc, restingStartMillis, true, false);
     }
 
-    public static LocationFix createRestingEnd(Location loc, long restingStartMillis) {
-        return create(loc, restingStartMillis, true, true);
+    public static LocationFix createRestingEnd(long timeMillis, Location loc, long restingStartMillis) {
+        return create(timeMillis, loc, restingStartMillis, true, true);
     }
 
-    public static LocationFix createMoving(Location loc, long movingStartMillis) {
-        return create(loc, movingStartMillis, false, false);
+    public static LocationFix createMoving(long timeMillis, Location loc, long movingStartMillis) {
+        return create(timeMillis, loc, movingStartMillis, false, false);
     }
 
-    public static LocationFix createMovingEnd(Location loc, long movingStartMillis) {
-        return create(loc, movingStartMillis, false, true);
+    public static LocationFix createMovingEnd(long timeMillis, Location loc, long movingStartMillis) {
+        return create(timeMillis, loc, movingStartMillis, false, true);
     }
 
     public long getSeconds() {

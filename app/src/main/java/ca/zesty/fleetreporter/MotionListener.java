@@ -28,11 +28,11 @@ public class MotionListener implements LocationListener {
     private static final long STABLE_MIN_MILLIS = 60 * 1000;  // one minute
     private static final double STABLE_MAX_DISTANCE = 20.0;  // meters
 
-    private long mStableStartMillis = -1;  // >= 0 iff the last Location was stable
-    private Location mStableLoc = null;  // last stable Location
+    private Long mStableStartMillis = null;  // non-null iff the last Location was stable
+    private Location mStableLocation = null;  // last stable Location (time is unused)
 
-    private long mRestingStartMillis = -1;  // >= 0 means our state is "resting"
-    private long mMovingStartMillis = -1;  // >= 0 means our state is "moving"
+    private Long mRestingStartMillis = null;  // non-null means our state is "resting"
+    private Long mMovingStartMillis = null;  // non-null means our state is "moving"
 
     private final LocationFixListener mTarget;
 
@@ -43,55 +43,57 @@ public class MotionListener implements LocationListener {
 
     @Override public void onLocationChanged(Location loc) {
         Log.i(TAG, "onLocationChanged: " + loc);
+        long timeMillis = loc.getTime();
 
         // Decide if the location is stable, and note the time it became stable.
         if (isStable(loc)) {
-            if (mStableLoc == null || !nearStableLocation(mStableLoc, loc)) {
-                mStableLoc = loc;
-                mStableStartMillis = loc.getTime();  // begin a new stable period
+            if (mStableStartMillis == null || !nearStableLocation(mStableLocation, loc)) {
+                mStableStartMillis = timeMillis;  // begin a new stable period
+                mStableLocation = loc;
             }
-            if (loc.getAccuracy() < mStableLoc.getAccuracy()) {
-                mStableLoc = loc;  // keep the most accurate location
+            if (loc.getAccuracy() < mStableLocation.getAccuracy()) {
+                mStableLocation = loc;  // keep the most accurate location
             }
-            mStableLoc.setTime(loc.getTime());  // use the up-to-date fix time
         } else {
-            mStableStartMillis = -1;
+            mStableStartMillis = null;
         }
 
         // Decide if we need to transition to resting or moving.
         LocationFix fix = null;
-        if (mStableLoc != null && loc.getTime() - mStableStartMillis > STABLE_MIN_MILLIS) {
-            if (mRestingStartMillis < 0) {  // transition to resting
+        if (mStableStartMillis != null && mStableLocation != null &&
+            timeMillis - mStableStartMillis > STABLE_MIN_MILLIS) {
+            if (mRestingStartMillis == null) {  // transition to resting
                 // The resting segment actually started a little bit in the past,
                 // at mStableStartMillis; indicate that motion ended at that time.
-                if (mMovingStartMillis >= 0) {
-                    Location movingEndLoc = new Location(mStableLoc);
-                    movingEndLoc.setTime(mStableStartMillis);
-                    fix = LocationFix.createMovingEnd(movingEndLoc, mMovingStartMillis);
+                if (mMovingStartMillis != null) {
+                    fix = LocationFix.createMovingEnd(
+                        mStableStartMillis, mStableLocation, mMovingStartMillis);
                 }
                 mRestingStartMillis = mStableStartMillis;
-                mMovingStartMillis = -1;
+                mMovingStartMillis = null;
             }
         } else {
-            if (mMovingStartMillis < 0) {  // transition to moving
-                if (mRestingStartMillis >= 0 && mStableLoc != null) {
-                    fix = LocationFix.createRestingEnd(mStableLoc, mRestingStartMillis);
+            if (mMovingStartMillis == null) {  // transition to moving
+                if (mRestingStartMillis != null && mStableLocation != null) {
+                    fix = LocationFix.createRestingEnd(
+                        timeMillis, mStableLocation, mRestingStartMillis);
                 }
-                mRestingStartMillis = -1;
-                mMovingStartMillis = loc.getTime();
+                mRestingStartMillis = null;
+                mMovingStartMillis = timeMillis;
             }
         }
 
         // If we haven't created a special LocationFix for a transition, make
         // a normal resting or moving LocationFix.
-        if (fix == null) {
-            fix = mRestingStartMillis >= 0 ?
-                LocationFix.createResting(mStableLoc, mRestingStartMillis) :
-                LocationFix.createMoving(loc, mMovingStartMillis);
+        if (fix == null && mRestingStartMillis != null) {
+            fix = LocationFix.createResting(timeMillis, mStableLocation, mRestingStartMillis);
+        }
+        if (fix == null && mMovingStartMillis != null) {
+            fix = LocationFix.createMoving(timeMillis, loc, mMovingStartMillis);
         }
 
         // Emit the LocationFix.
-        mTarget.onLocationFix(fix);
+        if (fix != null) mTarget.onLocationFix(fix);
     }
 
     @Override public void onStatusChanged(String provider, int status, Bundle extras) { }

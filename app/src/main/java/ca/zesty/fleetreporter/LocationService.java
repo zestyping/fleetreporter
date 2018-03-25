@@ -47,7 +47,9 @@ import java.util.TreeMap;
  *     |
  *     |   transmitLocationFixes() (~ once every TRANSMIT_INTERVAL_MILLIS)
  *     |       TRANSMIT_INTERVAL_MILLIS should be long enough to receive an
- *     |       SMS delivery acknowledgement before attempting to retransmit.
+ *     |       SMS delivery acknowledgement before attempting to retransmit,
+ *     |       and shorter than MotionListener.STABLE_MIN_MILLIS to ensure
+ *     |       that the message sending rate keeps up with the generation rate.
  *     v
  * SmsManager.sendTextMessage()
  */
