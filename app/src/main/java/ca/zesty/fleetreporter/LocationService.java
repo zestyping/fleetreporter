@@ -57,7 +57,6 @@ import java.util.TreeMap;
 public class LocationService extends Service implements LocationFixListener {
     private static final String TAG = "LocationService";
     private static final int NOTIFICATION_ID = 1;
-    private static final String DESTINATION_NUMBER = "+15103978793";
 
     private static final long LOCATION_INTERVAL_MILLIS = 10 * 1000;
     private static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
@@ -230,12 +229,16 @@ public class LocationService extends Service implements LocationFixListener {
                    "sending " + TextUtils.join(", ", sentKeys));
         Intent intent = new Intent(ACTION_FLEET_REPORTER_SMS_SENT);
         intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
-        sendSms(DESTINATION_NUMBER, message.trim(), PendingIntent.getBroadcast(
-            this, 0, intent, PendingIntent.FLAG_ONE_SHOT));
+        sendSms(Prefs.getDestinationNumber(this), message.trim(),
+            PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_ONE_SHOT));
     }
 
     /** Sends an SMS message. */
     private void sendSms(String destination, String message, PendingIntent sentIntent) {
+        if (destination.isEmpty()) {
+            Log.i(TAG, "Cannot send SMS; destination number is not set");
+            return;
+        }
         Log.i(TAG, "SMS to " + destination + ": " + message);
         getSmsManager().sendTextMessage(destination, null, message, sentIntent, null);
     }

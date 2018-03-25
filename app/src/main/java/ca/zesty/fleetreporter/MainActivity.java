@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.TextView;
@@ -30,12 +31,29 @@ public class MainActivity extends AppCompatActivity {
             Manifest.permission.WAKE_LOCK
         }, 0);
 
-        final Intent intent = new Intent(getApplicationContext(), LocationService.class);
+        final Intent settingsIntent = new Intent(this, SettingsActivity.class);
+        final Intent serviceIntent = new Intent(getApplicationContext(), LocationService.class);
+
+        findViewById(R.id.settings_button).setOnClickListener(
+            new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    startActivity(settingsIntent);
+                }
+            }
+        );
 
         findViewById(R.id.start_button).setOnClickListener(
             new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    startService(intent);
+                    if (Prefs.getDestinationNumber(MainActivity.this).isEmpty()) {
+                        new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("No destination number")
+                            .setMessage("Please enter a destination number in the Settings.")
+                            .setPositiveButton("OK", null)
+                            .show();
+                    } else {
+                        startService(serviceIntent);
+                    }
                 }
             }
         );
@@ -43,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.stop_button).setOnClickListener(
             new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    stopService(intent);
+                    stopService(serviceIntent);
                 }
             }
         );

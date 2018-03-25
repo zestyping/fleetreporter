@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:title="Settings">
+  <EditTextPreference
+      android:key="pref_destination_number"
+      android:title="Destination number"
+      android:summary="The mobile number where SMS location reports will be sent"
+      android:hint="A mobile number starting with +"
+      android:defaultValue="" />
+</PreferenceScreen>
