@@ -29,7 +29,7 @@ import java.util.TreeMap;
 /** A foreground service that records the device's GPS location and periodically
     reports it via SMS to the Fleet Map device.
 
-    Each LocationFix passes through the following stages on the way to becoming
+    Each Point passes through the following stages on the way to becoming
     an outgoing message to the server:
    
     LocationManager
@@ -38,15 +38,15 @@ import java.util.TreeMap;
         |       LOCATION_INTERVAL_MILLIS should be short enough that we can
         |       quickly detect when the device starts or stops moving.
         v
-    mLastFix (the latest location fix)
+    mLastPoint (the latest point)
         |
-        |   recordLocationFix() (~ once every RECORDING_INTERVAL_MILLIS)
-        |       RECORDING_INTERVAL_MILLIS is the length of time between fixes
+        |   recordPoint() (~ once every RECORDING_INTERVAL_MILLIS)
+        |       RECORDING_INTERVAL_MILLIS is the length of time between points
         |       that will be recorded as a track or plotted on a map.
         v
-    mOutbox (the queue of all location fixes yet to be sent by SMS)
+    mOutbox (the queue of all points yet to be sent by SMS)
         |
-        |   transmitLocationFixes() (~ once every TRANSMIT_INTERVAL_MILLIS)
+        |   transmitMessages() (~ once every TRANSMIT_INTERVAL_MILLIS)
         |       TRANSMIT_INTERVAL_MILLIS should be long enough to receive an
         |       SMS delivery acknowledgement before attempting to retransmit,
         |       and shorter than MotionListener.STABLE_MIN_MILLIS to ensure
@@ -54,7 +54,7 @@ import java.util.TreeMap;
         v
     SmsManager.sendTextMessage()
  */
-public class LocationService extends Service implements LocationFixListener {
+public class LocationService extends Service implements PointListener {
     private static final String TAG = "LocationService";
     private static final int NOTIFICATION_ID = 1;
 
@@ -62,7 +62,7 @@ public class LocationService extends Service implements LocationFixListener {
     private static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
     private static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
     private static final long TRANSMIT_INTERVAL_MILLIS = 30 * 1000;
-    private static final int LOCATION_FIXES_PER_MESSAGE = 2;
+    private static final int POINTS_PER_SMS_MESSAGE = 2;
     private static final int MAX_OUTBOX_SIZE = 48;
     private static final String ACTION_FLEET_REPORTER_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
     private static final String EXTRA_SENT_KEYS = "SENT_KEYS";
@@ -70,8 +70,8 @@ public class LocationService extends Service implements LocationFixListener {
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
     private boolean mStarted = false;
     private PowerManager.WakeLock mWakeLock = null;
-    private MotionListener mMotionListener;
-    private LocationFix mLastFix = null;
+    private LocationAdapter mLocationListener = null;
+    private Point mLastPoint = null;
     private Handler mHandler = null;
     private Runnable mRunnable = null;
     private long mClockOffset = 0;  // GPS time minus System.currentTimeMillis()
@@ -79,7 +79,7 @@ public class LocationService extends Service implements LocationFixListener {
     private long mNextTransmitMillis = 0;
     private long mNumRecorded = 0;
     private long mNumSent = 0;
-    private SortedMap<Long, LocationFix> mOutbox = new TreeMap<>(new Comparator<Long>() {
+    private SortedMap<Long, Point> mOutbox = new TreeMap<>(new Comparator<Long>() {
         @Override public int compare(Long a, Long b) {  // sort in descending order
             return b > a ? 1 : b < a ? -1 : 0;
         }
@@ -105,16 +105,17 @@ public class LocationService extends Service implements LocationFixListener {
             startForeground(NOTIFICATION_ID, buildNotification());
 
             // Activate the GPS receiver.
-            mMotionListener = new MotionListener(this);
+            mLocationListener = new LocationAdapter(new MotionListener(this));
             getLocationManager().requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mMotionListener);
+                LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationListener);
 
-            // Start periodically recording and transmitting location fixes.
+            // Start periodically recording and transmitting points.
             mHandler = new Handler();
             mRunnable = new Runnable() {
                 public void run() {
-                    checkWhetherToRecordLocationFix();
-                    checkWhetherToTransmitLocationFixes();
+                    mLocationListener.emitLastFix();
+                    checkWhetherToRecordPoint();
+                    checkWhetherToTransmitMessages();
                     mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
                 }
             };
@@ -123,14 +124,23 @@ public class LocationService extends Service implements LocationFixListener {
         return START_STICKY;
     }
 
+    /** Cleans up when the service is about to stop. */
+    @Override public void onDestroy() {
+        mHandler.removeCallbacks(mRunnable);
+        getLocationManager().removeUpdates(mLocationListener);
+        unregisterReceiver(mSmsStatusReceiver);
+        if (mWakeLock != null) mWakeLock.release();
+        mStarted = false;
+    }
+
     class SmsStatusReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
             if (getResultCode() == Activity.RESULT_OK &&
                 intent.hasExtra(EXTRA_SENT_KEYS)) {  // confirmation that SMS was sent
-                for (long fixTime : intent.getLongArrayExtra(EXTRA_SENT_KEYS)) {
-                    Log.i(TAG, "sent " + fixTime + "; removing from outbox");
+                for (long key : intent.getLongArrayExtra(EXTRA_SENT_KEYS)) {
+                    Log.i(TAG, "sent " + key + "; removing from outbox");
                     mNumSent += 1;
-                    mOutbox.remove(fixTime);
+                    mOutbox.remove(key);
                 }
                 getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
             } else {
@@ -152,7 +162,7 @@ public class LocationService extends Service implements LocationFixListener {
         long minutes = Math.max(0, (long) Math.ceil(
             (mNextRecordMillis - getGpsTimeMillis()) / 60000));
         String message = (
-            mNumRecorded + " " + Utils.plural(mNumRecorded, "fix", "fixes") +
+            mNumRecorded + " " + Utils.plural(mNumRecorded, "point", "points") +
             " recorded; next in " + minutes + " minute" + Utils.plural(minutes) +
             "; " + mNumSent + " sent; " + mOutbox.size() + " queued."
         );
@@ -165,67 +175,62 @@ public class LocationService extends Service implements LocationFixListener {
             .build();
     }
 
-    /** Receives a new LocationFix from the MotionListener. */
-    public void onLocationFix(LocationFix fix) {
-        // The phone's clock could be inaccurate.  Whenever we get a Location,
-        // we can estimate the offset between the phone's clock and GPS time,
-        // and this allows us to use estimated GPS time for all stored times and
-        // for scheduling all timed actions (see all uses of getGpsTimeMillis()).
-        mClockOffset = fix.timeMillis - System.currentTimeMillis();
-        Log.i(TAG, "onLocationFix: " + fix + " (clock offset " + mClockOffset + ")");
-        mLastFix = fix;
-        checkWhetherToRecordLocationFix();
+    /** Receives a new Point from the MotionListener. */
+    public void onPoint(Point point) {
+        Log.i(TAG, "onPoint: " + point);
+        mLastPoint = point;
+        checkWhetherToRecordPoint();
     }
 
-    /** Examines the last acquired fix, and moves it to the outbox if necessary. */
-    private void checkWhetherToRecordLocationFix() {
-        if (mLastFix != null) {
+    /** Examines the last acquired point, and moves it to the outbox if necessary. */
+    private void checkWhetherToRecordPoint() {
+        if (mLastPoint != null) {
             // If we've just transitioned between resting and moving, record the
-            // fix immediately; otherwise wait until we're next scheduled to record.
-            if (mLastFix.isSegmentEnd || getGpsTimeMillis() >= mNextRecordMillis) {
-                recordLocationFix(mLastFix);
+            // point immediately; otherwise wait until we're next scheduled to record.
+            if (mLastPoint.isSegmentEnd || getGpsTimeMillis() >= mNextRecordMillis) {
+                recordPoint(mLastPoint);
                 // We want RECORDING_INTERVAL_MILLIS to be the maximum interval
                 // between fix times, so schedule the next time based on the
                 // time elapsed after the fix time, not time elapsed after now.
-                mNextRecordMillis = mLastFix.timeMillis + RECORDING_INTERVAL_MILLIS;
-                mLastFix = null;
+                mNextRecordMillis = mLastPoint.fix.timeMillis + RECORDING_INTERVAL_MILLIS;
+                mLastPoint = null;
             }
         }
     }
 
-    /** Records a location fix in the outbox, to be sent out over SMS. */
-    private void recordLocationFix(LocationFix fix) {
-        mOutbox.put(fix.getSeconds(), fix);
-        Log.i(TAG, "recordLocationFix: " + fix + " (" + mOutbox.size() + " queued)");
+    /** Records a point in the outbox, to be sent out over SMS. */
+    private void recordPoint(Point point) {
+        mOutbox.put(point.getSeconds(), point);
+        Log.i(TAG, "recordPoint: " + point + " (" + mOutbox.size() + " queued)");
         mNumRecorded += 1;
         limitOutboxSize();
-        checkWhetherToTransmitLocationFixes();
+        checkWhetherToTransmitMessages();
         getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
 
-        // Show the location fix in the app's text box.
+        // Show the point in the app's text box.
         Intent intent = new Intent(MainActivity.ACTION_FLEET_REPORTER_LOG_MESSAGE);
-        intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE, fix.format());
+        intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE, point.format());
         sendBroadcast(intent);
     }
 
-    /** Transmits location fixes in the outbox, if it's not too soon to do so. */
-    private void checkWhetherToTransmitLocationFixes() {
+    /** Transmits points in the outbox, if it's not too soon to do so. */
+    private void checkWhetherToTransmitMessages() {
         if (getGpsTimeMillis() >= mNextTransmitMillis && mOutbox.size() > 0) {
-            transmitLocationFixes();
+            transmitMessages();
             mNextTransmitMillis = getGpsTimeMillis() + TRANSMIT_INTERVAL_MILLIS;
         }
     }
 
-    /** Transmits some of the pending location fixes in the outbox over SMS. */
-    private void transmitLocationFixes() {
+    /** Transmits some of the pending points in the outbox over SMS. */
+    private void transmitMessages() {
         String message = "";
         List<Long> sentKeys = new ArrayList<>();
         for (Long key : mOutbox.keySet()) {
             message += mOutbox.get(key).format() + "\n";
             sentKeys.add(key);
-            if (sentKeys.size() >= LOCATION_FIXES_PER_MESSAGE) break;
+            if (sentKeys.size() >= POINTS_PER_SMS_MESSAGE) break;
         }
-        Log.i(TAG, "transmitLocationFixes: " + mOutbox.size() + " in queue; " +
+        Log.i(TAG, "transmitMessages: " + mOutbox.size() + " in queue; " +
                    "sending " + TextUtils.join(", ", sentKeys));
         Intent intent = new Intent(ACTION_FLEET_REPORTER_SMS_SENT);
         intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
@@ -250,22 +255,13 @@ public class LocationService extends Service implements LocationFixListener {
         }
     }
 
-    /** Cleans up when the service is about to stop. */
-    @Override public void onDestroy() {
-        mHandler.removeCallbacks(mRunnable);
-        getLocationManager().removeUpdates(mMotionListener);
-        unregisterReceiver(mSmsStatusReceiver);
-        if (mWakeLock != null) mWakeLock.release();
-        mStarted = false;
-    }
-
     @Nullable @Override public IBinder onBind(Intent intent) {
         return null;
     }
 
-    /** Estimates the current GPS time. */
     private long getGpsTimeMillis() {
-        return System.currentTimeMillis() + mClockOffset;
+        return mLocationListener == null ?
+            System.currentTimeMillis() : mLocationListener.getGpsTimeMillis();
     }
 
     private LocationManager getLocationManager() {

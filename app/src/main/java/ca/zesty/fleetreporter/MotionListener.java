@@ -1,14 +1,11 @@
 package ca.zesty.fleetreporter;
 
-import android.location.Location;
-import android.location.LocationListener;
-import android.os.Bundle;
 import android.util.Log;
 
 /** A LocationListener that estimates whether the GPS receiver is resting or
-    moving, and converts each received Location to an appropriate LocationFix.
+    moving, and converts each received Location to an appropriate Point.
  */
-public class MotionListener implements LocationListener {
+public class MotionListener implements LocationFixListener {
     private static final String TAG = "MotionListener";
 
     // Note the terminology "stable" versus "resting": "stable" is a property
@@ -28,88 +25,82 @@ public class MotionListener implements LocationListener {
     private static final long STABLE_MIN_MILLIS = 60 * 1000;  // one minute
     private static final double STABLE_MAX_DISTANCE = 20.0;  // meters
 
-    private Long mStableStartMillis = null;  // non-null iff the last Location was stable
-    private Location mStableLocation = null;  // last stable Location (time is unused)
+    private Long mStableStartMillis = null;  // non-null iff the last LocationFix was stable
+    private LocationFix mStableFix = null;  // last stable LocationFix (time is unused)
 
     private Long mRestingStartMillis = null;  // non-null means our state is "resting"
     private Long mMovingStartMillis = null;  // non-null means our state is "moving"
 
-    private final LocationFixListener mTarget;
+    private final PointListener mTarget;
 
-    /** Creates a MotionListener that sends LocationFixes to target. */
-    public MotionListener(LocationFixListener target) {
+    /** Creates a MotionListener that sends Points to a PointListener. */
+    public MotionListener(PointListener target) {
         mTarget = target;
     }
 
-    @Override public void onLocationChanged(Location loc) {
-        Log.i(TAG, "onLocationChanged: " + loc);
-        long timeMillis = loc.getTime();
+    @Override public void onLocationFix(LocationFix fix) {
+        Log.i(TAG, "onLocationFix: " + fix);
+        if (fix == null) return;
 
         // Decide if the location is stable, and note the time it became stable.
-        if (isStable(loc)) {
-            if (mStableStartMillis == null || !nearStableLocation(mStableLocation, loc)) {
-                mStableStartMillis = timeMillis;  // begin a new stable period
-                mStableLocation = loc;
+        if (isStable(fix)) {
+            if (mStableStartMillis == null || !nearStableFix(mStableFix, fix)) {
+                mStableStartMillis = fix.timeMillis;  // begin a new stable period
+                mStableFix = fix;
             }
-            if (loc.getAccuracy() < mStableLocation.getAccuracy()) {
-                mStableLocation = loc;  // keep the most accurate location
+            if (fix.latLonSd < mStableFix.latLonSd) {
+                mStableFix = fix;  // keep the most accurate fix
             }
         } else {
             mStableStartMillis = null;
         }
 
         // Decide if we need to transition to resting or moving.
-        LocationFix fix = null;
-        if (mStableStartMillis != null && mStableLocation != null &&
-            timeMillis - mStableStartMillis >= STABLE_MIN_MILLIS) {
+        Point point = null;
+        if (mStableStartMillis != null && mStableFix != null &&
+            fix.timeMillis - mStableStartMillis >= STABLE_MIN_MILLIS) {
             if (mRestingStartMillis == null) {  // transition to resting
                 // The resting segment actually started a little bit in the past,
                 // at mStableStartMillis; indicate that motion ended at that time.
                 if (mMovingStartMillis != null) {
-                    fix = LocationFix.createMovingEnd(
-                        mStableStartMillis, mStableLocation, mMovingStartMillis);
+                    point = Point.createMovingEnd(
+                        mStableFix.withTime(mStableStartMillis), mMovingStartMillis);
                 }
                 mRestingStartMillis = mStableStartMillis;
                 mMovingStartMillis = null;
             }
         } else {
             if (mMovingStartMillis == null) {  // transition to moving
-                if (mRestingStartMillis != null && mStableLocation != null) {
-                    fix = LocationFix.createRestingEnd(
-                        timeMillis, mStableLocation, mRestingStartMillis);
+                if (mRestingStartMillis != null && mStableFix != null) {
+                    point = Point.createRestingEnd(
+                        mStableFix.withTime(fix.timeMillis), mRestingStartMillis);
                 }
                 mRestingStartMillis = null;
-                mMovingStartMillis = timeMillis;
+                mMovingStartMillis = fix.timeMillis;
             }
         }
 
-        // If we haven't created a special LocationFix for a transition, make
-        // a normal resting or moving LocationFix.
-        if (fix == null && mRestingStartMillis != null) {
-            fix = LocationFix.createResting(timeMillis, mStableLocation, mRestingStartMillis);
+        // If we haven't created a special Point for a transition, make
+        // a normal resting or moving Point.
+        if (point == null && mRestingStartMillis != null) {
+            point = Point.createResting(mStableFix.withTime(fix.timeMillis), mRestingStartMillis);
         }
-        if (fix == null && mMovingStartMillis != null) {
-            // Emit a moving LocationFix only if we're not waiting to stabilize.
-            if (mStableStartMillis == null || timeMillis == mStableStartMillis) {
-                fix = LocationFix.createMoving(timeMillis, loc, mMovingStartMillis);
+        if (point == null && mMovingStartMillis != null) {
+            // Emit a moving Point only if we're not waiting to stabilize.
+            if (mStableStartMillis == null || fix.timeMillis == mStableStartMillis) {
+                point = Point.createMoving(fix, mMovingStartMillis);
             }
         }
 
-        // Emit the LocationFix.
-        if (fix != null) mTarget.onLocationFix(fix);
+        // Emit the Point.
+        if (point != null) mTarget.onPoint(point);
     }
 
-    @Override public void onStatusChanged(String provider, int status, Bundle extras) { }
-
-    @Override public void onProviderEnabled(String provider) { }
-
-    @Override public void onProviderDisabled(String provider) { }
-
-    private boolean isStable(Location loc) {
-        return loc.getSpeed() < STABLE_MAX_SPEED && loc.getAccuracy() < STABLE_MAX_ACCURACY;
+    private boolean isStable(LocationFix fix) {
+        return fix.speed < STABLE_MAX_SPEED && fix.latLonSd < STABLE_MAX_ACCURACY;
     }
 
-    private boolean nearStableLocation(Location stableLoc, Location loc) {
-        return stableLoc.distanceTo(loc) < STABLE_MAX_DISTANCE;
+    private boolean nearStableFix(LocationFix stableFix, LocationFix fix) {
+        return stableFix.distanceTo(fix) < STABLE_MAX_DISTANCE;
     }
 }

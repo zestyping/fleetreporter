@@ -81,7 +81,8 @@ public class MainActivity extends AppCompatActivity {
         @Override public void onReceive(Context context, Intent intent) {
             if (intent.hasExtra(EXTRA_LOG_MESSAGE)) {
                 String message = intent.getStringExtra(EXTRA_LOG_MESSAGE);
-                ((TextView) findViewById(R.id.message_log)).append(message + "\n");
+                ((TextView) findViewById(R.id.message_log)).append(
+                    new java.util.Date(System.currentTimeMillis()) + "\n" + message + "\n");
             }
         }
     }

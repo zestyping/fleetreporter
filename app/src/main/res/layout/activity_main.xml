@@ -42,7 +42,7 @@
   <TextView
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:text="Recorded location fixes:" />
+      android:text="Recorded points:" />
 
   <TextView
       android:id="@+id/message_log"

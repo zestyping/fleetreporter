@@ -1,8 +1,23 @@
 package ca.zesty.fleetreporter;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 
 public class Utils {
+    private static final SimpleDateFormat RFC3339_UTC;
+    static {
+        RFC3339_UTC = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+        RFC3339_UTC.setTimeZone(TimeZone.getTimeZone("UTC"));
+    }
+
+    /** Formats a time as an RFC3339 timestamp in UTC of exactly 20 characters. */
+    public static String formatUtcTimestamp(long timeMillis) {
+        return RFC3339_UTC.format(new Date(timeMillis));
+    }
+
     public static String plural(long count, String singular, String plural) {
         return (count == 1) ? singular : plural;
     }
