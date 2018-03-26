@@ -24,6 +24,7 @@ public class MotionListener implements LocationFixListener {
     private static final double STABLE_MAX_SPEED = 2.0;  // meters per second
     private static final long STABLE_MIN_MILLIS = 60 * 1000;  // one minute
     private static final double STABLE_MAX_DISTANCE = 20.0;  // meters
+    private static final double GOOD_ENOUGH_ACCURACY = 10.0;  // meters
 
     private Long mStableStartMillis = null;  // non-null iff the last LocationFix was stable
     private LocationFix mStableFix = null;  // last stable LocationFix (time is unused)
@@ -48,8 +49,15 @@ public class MotionListener implements LocationFixListener {
                 mStableStartMillis = fix.timeMillis;  // begin a new stable period
                 mStableFix = fix;
             }
-            if (fix.latLonSd < mStableFix.latLonSd) {
-                mStableFix = fix;  // keep the most accurate fix
+            // If the stable fix isn't that accurate, and we get a more accurate
+            // fix, we'd like to improve the stable fix.  But if we keep adjusting
+            // the stable fix too much, it will drift to follow the new fix,
+            // which would allow the new fix to travel much farther than
+            // STABLE_MAX_DISTANCE without being detected as motion.  So, once
+            // the stable fix reaches "good enough" accuracy, stop adjusting.
+            if (mStableFix.latLonSd > GOOD_ENOUGH_ACCURACY &&
+                fix.latLonSd < mStableFix.latLonSd) {
+                mStableFix = fix;
             }
         } else {
             mStableStartMillis = null;
