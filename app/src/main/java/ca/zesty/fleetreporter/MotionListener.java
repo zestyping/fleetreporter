@@ -6,7 +6,7 @@ import android.util.Log;
     moving, and converts each received Location to an appropriate Point.
  */
 public class MotionListener implements LocationFixListener {
-    private static final String TAG = "MotionListener";
+    static final String TAG = "MotionListener";
 
     // Note the terminology "stable" versus "resting": "stable" is a property
     // of an individual location, whereas "resting"/"moving" describes the
@@ -20,11 +20,11 @@ public class MotionListener implements LocationFixListener {
     // the Location readings for a period of time (STABLE_MIN_MILLIS) have
     // been stable and close together (within STABLE_MAX_DISTANCE).
 
-    private static final double STABLE_MAX_ACCURACY = 50.0;  // meters
-    private static final double STABLE_MAX_SPEED = 2.0;  // meters per second
-    private static final long STABLE_MIN_MILLIS = 60 * 1000;  // one minute
-    private static final double STABLE_MAX_DISTANCE = 20.0;  // meters
-    private static final double GOOD_ENOUGH_ACCURACY = 10.0;  // meters
+    static final double STABLE_MAX_ACCURACY = 50.0;  // meters
+    static final double STABLE_MAX_SPEED = 2.0;  // meters per second
+    static final long STABLE_MIN_MILLIS = 60 * 1000;  // one minute
+    static final double STABLE_MAX_DISTANCE = 20.0;  // meters
+    static final double GOOD_ENOUGH_ACCURACY = 10.0;  // meters
 
     private Long mStableStartMillis = null;  // non-null iff the last LocationFix was stable
     private LocationFix mStableFix = null;  // last stable LocationFix (time is unused)

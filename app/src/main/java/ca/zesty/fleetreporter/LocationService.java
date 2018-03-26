@@ -55,17 +55,16 @@ import java.util.TreeMap;
     SmsManager.sendTextMessage()
  */
 public class LocationService extends Service implements PointListener {
-    private static final String TAG = "LocationService";
-    private static final int NOTIFICATION_ID = 1;
-
-    private static final long LOCATION_INTERVAL_MILLIS = 10 * 1000;
-    private static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
-    private static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
-    private static final long TRANSMIT_INTERVAL_MILLIS = 30 * 1000;
-    private static final int POINTS_PER_SMS_MESSAGE = 2;
-    private static final int MAX_OUTBOX_SIZE = 48;
-    private static final String ACTION_FLEET_REPORTER_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
-    private static final String EXTRA_SENT_KEYS = "SENT_KEYS";
+    static final String TAG = "LocationService";
+    static final int NOTIFICATION_ID = 1;
+    static final long LOCATION_INTERVAL_MILLIS = 10 * 1000;
+    static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
+    static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
+    static final long TRANSMIT_INTERVAL_MILLIS = 30 * 1000;
+    static final int POINTS_PER_SMS_MESSAGE = 2;
+    static final int MAX_OUTBOX_SIZE = 48;
+    static final String ACTION_FLEET_REPORTER_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
+    static final String EXTRA_SENT_KEYS = "SENT_KEYS";
 
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
     private boolean mStarted = false;

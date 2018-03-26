@@ -7,7 +7,7 @@ import android.support.annotation.NonNull;
 
 /** Access to shared preferences. */
 public class Prefs {
-    private static final String DESTINATION_NUMBER_KEY = "pref_destination_number";
+    static final String DESTINATION_NUMBER_KEY = "pref_destination_number";
 
     public static SharedPreferences getPrefs(Context context) {
         return PreferenceManager.getDefaultSharedPreferences(context);

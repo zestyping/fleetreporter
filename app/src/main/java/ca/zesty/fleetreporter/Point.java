@@ -78,7 +78,7 @@ public class Point {
     /** Formats a point into a string of at most 67 characters. */
     public String format() {
         return String.format(Locale.US, "%s;%+.5f;%+.5f;%+d;%d;%d;%d;%d%s",
-            Utils.formatUtcTimestamp(fix.timeMillis),  // 20 chars
+            Utils.formatUtcTimeSeconds(fix.timeMillis),  // 20 chars
             Utils.clamp(-90, 90, fix.latitude),  // degrees, 9 chars
             Utils.clamp(-180, 180, fix.longitude),  // degrees, 10 chars
             Utils.clamp(-9999, 9999, Math.round(fix.altitude)),  // meters, 5 chars

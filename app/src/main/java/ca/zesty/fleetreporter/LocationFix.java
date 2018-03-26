@@ -6,10 +6,10 @@ import java.util.Locale;
     cannot be used in unit tests due to its unfortunate design.
  */
 public class LocationFix {
-    private static final double EQUATOR_RADIUS = 6378137;  // meters from Earth center to equator
-    private static final double POLE_RADIUS = 6356752;  // meters from Earth center to pole
-    private static final double MEAN_RADIUS = (2 * EQUATOR_RADIUS + POLE_RADIUS)/3;
-    private static final double RADIANS_PER_DEGREE = 2 * Math.PI / 360;
+    static final double EQUATOR_RADIUS = 6378137;  // meters from Earth center to equator
+    static final double POLE_RADIUS = 6356752;  // meters from Earth center to pole
+    static final double MEAN_RADIUS = (2 * EQUATOR_RADIUS + POLE_RADIUS)/3;
+    static final double RADIANS_PER_DEGREE = 2 * Math.PI / 360;
 
     public final long timeMillis;  // ms since 1970-01-01 00:00:00 UTC
     public final double latitude;  // degrees
@@ -47,7 +47,7 @@ public class LocationFix {
     public String toString() {
         return String.format(
             Locale.US, "%s: (%+.5f, %+.5f, %+.0f m), %.1f m/s brg %.0f, sd=%.0f m",
-            Utils.formatUtcTimestamp(timeMillis),
+            Utils.formatUtcTimeMillis(timeMillis),
             latitude, longitude, altitude, speed, bearing, latLonSd
         );
     }

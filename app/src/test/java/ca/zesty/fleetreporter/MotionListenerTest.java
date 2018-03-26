@@ -9,10 +9,14 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 
 public class MotionListenerTest {
-    public static final long SECOND = 1000;  // millis
-    public static final long MINUTE = 60000;  // millis
-    public static final long T0 = 1514764800_000L;  // 2018-01-01 00:00:00 UTC
-    public static final LocationFix L0 = new LocationFix(T0, 37, -122, 0, 0, 0, 12);
+    static final long STABLE_MIN_MILLIS = MotionListener.STABLE_MIN_MILLIS;
+    static final long SECOND = 1000;  // millis
+    static final long MINUTE = 60000;  // millis
+    static final long T0 = 1514764800_000L;  // 2018-01-01 00:00:00 UTC
+    static final long T1 = T0 + STABLE_MIN_MILLIS - 1;  // just before stabilization
+    static final LocationFix L0 = new LocationFix(T0, 37, -122, 0, 0, 0, 12);
+    static final LocationFix L0_NEAR = new LocationFix(T0, 37.00010, -122, 0, 0, 0, 12);
+    static final LocationFix L0_FAR = new LocationFix(T0, 37.00030, -122, 0, 0, 0, 12);
 
     private AppendListener al;
     private MotionListener ml;
@@ -20,17 +24,62 @@ public class MotionListenerTest {
     @Before public void setUp() {
         al = new AppendListener();
         ml = new MotionListener(al);
-    }
-
-    @Test public void initialRestingPeriod_yieldsMovingEndPoint() throws Exception {
         ml.onLocationFix(L0.withTime(T0));
         assertMovingPoint(L0, T0, T0, al.popOne());
-        ml.onLocationFix(L0.withTime(T0 + 10 * SECOND));
-        assertEquals(0, al.points.size());
-        ml.onLocationFix(L0.withTime(T0 + 61 * SECOND));
+    }
+
+    @Test public void whileStabilizing_emitsNoPoints() throws Exception {
+        simulateFix(L0, T0 + 1);
+        assertNoPoints();
+        simulateFix(L0, T0 + STABLE_MIN_MILLIS - 1);
+        assertNoPoints();
+    }
+
+    @Test public void afterStabilized_emitsRetroactiveMovingEndPoint() throws Exception {
+        whileStabilizing_emitsNoPoints();
+        simulateFix(L0, T0 + STABLE_MIN_MILLIS + 1);
         assertMovingEndPoint(L0, T0, T0, al.popOne());
-        ml.onLocationFix(L0.withTime(T0 + 99 * SECOND));
-        assertRestingPoint(L0, T0 + 99 * SECOND, T0, al.popOne());
+    }
+
+    @Test public void immediateDepartureFromStartingPoint_emitsMovingPoint() throws Exception {
+        simulateFix(L0_FAR, T0 + 1);
+        assertMovingPoint(L0_FAR, T0 + 1, T0, al.popOne());
+    }
+
+    @Test public void departureFromStartingPointBeforeStabilized_emitsMovingPoint() throws Exception {
+        simulateFix(L0_NEAR, T0 + 1);
+        assertNoPoints();
+        simulateFix(L0_NEAR, T1 - 1);
+        assertNoPoints();
+        simulateFix(L0_FAR, T1);
+        assertMovingPoint(L0_FAR, T1, T0, al.popOne());
+    }
+
+    @Test public void afterMovingWhileStabilizing_emitsNoPoints() throws Exception {
+        simulateFix(L0_FAR, T1);
+        assertMovingPoint(L0_FAR, T1, T0, al.popOne());
+        simulateFix(L0_FAR, T1 + 1);
+        assertNoPoints();
+        simulateFix(L0_FAR, T1 + STABLE_MIN_MILLIS - 1);
+        assertNoPoints();
+    }
+
+    @Test public void afterMovingThenStabilized_emitsRetroactiveMovingEndPoint() throws Exception {
+        afterMovingWhileStabilizing_emitsNoPoints();
+        simulateFix(L0_FAR, T1 + STABLE_MIN_MILLIS + 1);
+        assertMovingEndPoint(L0_FAR, T1, T0, al.popOne());
+    }
+
+    private void simulateFix(LocationFix fix) {
+        ml.onLocationFix(fix);
+    }
+
+    private void simulateFix(LocationFix fix, long timeMillis) {
+        ml.onLocationFix(fix.withTime(timeMillis));
+    }
+
+    private void assertNoPoints() {
+        assertEquals(0, al.points.size());
     }
 
     private static void assertRestingPoint(LocationFix fix, long timeMillis, long restingStartMillis, Point actual) {
