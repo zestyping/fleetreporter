@@ -36,7 +36,7 @@ public class Point {
         return new Point(fix, restingStartMillis, true, false);
     }
 
-    public static Point createRestingEnd(LocationFix fix, long restingStartMillis) {
+    public static Point createGo(LocationFix fix, long restingStartMillis) {
         return new Point(fix, restingStartMillis, true, true);
     }
 
@@ -44,7 +44,7 @@ public class Point {
         return new Point(fix, movingStartMillis, false, false);
     }
 
-    public static Point createMovingEnd(LocationFix fix, long movingStartMillis) {
+    public static Point createStop(LocationFix fix, long movingStartMillis) {
         return new Point(fix, movingStartMillis, false, true);
     }
 

@@ -71,7 +71,7 @@ public class MotionListener implements LocationFixListener {
                 // The resting segment actually started a little bit in the past,
                 // at mStableStartMillis; indicate that motion ended at that time.
                 if (mMovingStartMillis != null) {
-                    point = Point.createMovingEnd(
+                    point = Point.createStop(
                         mStableFix.withTime(mStableStartMillis), mMovingStartMillis);
                 }
                 mRestingStartMillis = mStableStartMillis;
@@ -80,7 +80,7 @@ public class MotionListener implements LocationFixListener {
         } else {
             if (mMovingStartMillis == null) {  // transition to moving
                 if (mRestingStartMillis != null && mStableFix != null) {
-                    point = Point.createRestingEnd(
+                    point = Point.createGo(
                         mStableFix.withTime(fix.timeMillis), mRestingStartMillis);
                 }
                 mRestingStartMillis = null;
