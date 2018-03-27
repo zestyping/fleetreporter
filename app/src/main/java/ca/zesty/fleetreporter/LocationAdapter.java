@@ -12,6 +12,7 @@ import android.os.Bundle;
 public class LocationAdapter implements LocationListener {
     private final LocationFixListener mTarget;
     private LocationFix mLastFix = null;
+    private long mLastFixEmittedMillis = 0;
     private long mGpsTimeOffsetMillis = 0;
 
     public LocationAdapter(LocationFixListener target) {
@@ -30,6 +31,7 @@ public class LocationAdapter implements LocationListener {
             location.getSpeed(), location.getBearing(), location.getAccuracy()
         );
         mTarget.onLocationFix(mLastFix);
+        mLastFixEmittedMillis = mLastFix.timeMillis;
     }
 
     @Override public void onStatusChanged(String provider, int status, Bundle extras) {
@@ -46,8 +48,9 @@ public class LocationAdapter implements LocationListener {
      in the last durationMillis milliseconds. */
     public void ensureFixEmittedWithinLast(long durationMillis) {
         long nowMillis = getGpsTimeMillis();
-        if (nowMillis >= mLastFix.timeMillis + durationMillis) {
-            mTarget.onLocationFix(mLastFix.withTime(nowMillis));
+        if (nowMillis >= mLastFixEmittedMillis + durationMillis) {
+            mTarget.onLocationFix(mLastFix == null ? null : mLastFix.withTime(nowMillis));
+            mLastFixEmittedMillis = nowMillis;
         }
     }
 
@@ -55,6 +58,7 @@ public class LocationAdapter implements LocationListener {
         if (mLastFix != null) {
             mLastFix = null;
             mTarget.onLocationFix(null);
+            mLastFixEmittedMillis = getGpsTimeMillis();
         }
     }
 
