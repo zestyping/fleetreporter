@@ -6,6 +6,7 @@
 .idea/workspace.xml
 .idea/**/libraries
 .idea/**/gradle.xml
+/apks
 /build
 /captures
 /local.properties

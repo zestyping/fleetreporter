@@ -15,10 +15,10 @@ ext {
     }
 
     getGitVersionDescription = { ->
-        getCommandOutput('git', 'describe', '--tags', '--dirty=*')
+        getCommandOutput('git', 'describe', '--tags', '--dirty=+')
             .replaceAll('^v', '')
-            .replaceAll('-g([0-9a-f]+)(\\*?)', '$2 ($1$2)')
-            .replaceAll('-', '+')
+            .replaceAll('-g([0-9a-f]+)(\\+?)', '$2 ($1$2)')
+            .replaceAll('-', 'p')
     }
 }
 
@@ -58,3 +58,19 @@ dependencies {
     androidTestCompile 'junit:junit:4.12'
     androidTestCompile 'com.android.support.test:runner:1.0.1'
 }
+
+task copyDebugApk {
+    def version = android.defaultConfig.versionName.replaceAll(' .*', '')
+    def filename = 'fleetreporter-' + version + '.apk'
+    doLast {
+        println ''
+        println 'Copying app-debug.apk to ' + filename
+        copy {
+            from 'build/outputs/apk/app-debug.apk'
+            into '../apks'
+            rename 'app-debug.apk', filename
+        }
+    }
+}
+
+assembleDebug.finalizedBy copyDebugApk
