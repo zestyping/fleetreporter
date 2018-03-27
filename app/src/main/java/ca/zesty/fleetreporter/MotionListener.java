@@ -16,23 +16,23 @@ public class MotionListener implements LocationFixListener {
     // small enough (< STABLE_MAX_ACCURACY) and its "speed" field is close
     // enough to zero (< STABLE_MAX_SPEED).
     //
-    // The MotionListener decides that the GPS receiver is "resting" if all
-    // the Location readings for a period of time (STABLE_MIN_MILLIS) have
-    // been stable and close together (within STABLE_MAX_DISTANCE).
+    // The MotionListener enters the "resting" state if all the location fixes
+    // during a "settling period" (SETTLING_PERIOD_MILLIS) have been stable and
+    // close together (within RESTING_RADIUS of a selected anchor location).
 
     static final double STABLE_MAX_ACCURACY = 50.0;  // meters
     static final double STABLE_MAX_SPEED = 2.0;  // meters per second
-    static final long STABLE_MIN_MILLIS = 60 * 1000;  // one minute
-    static final double STABLE_MAX_DISTANCE = 20.0;  // meters
+    static final long SETTLING_PERIOD_MILLIS = 60 * 1000;  // one minute
+    static final double RESTING_RADIUS = 20.0;  // meters
     static final double GOOD_ENOUGH_ACCURACY = 10.0;  // meters
 
-    private Long mStableStartMillis = null;  // non-null iff the last LocationFix was stable
-    private LocationFix mStableFix = null;  // last stable LocationFix (time is unused)
-
-    private Long mRestingStartMillis = null;  // non-null means our state is "resting"
-    private Long mMovingStartMillis = null;  // non-null means our state is "moving"
-
     private final PointListener mTarget;
+    private boolean isResting = false;  // current state, either "resting" or "moving"
+    private Long mLastTransitionMillis = null;  // time of last state transition
+
+    private Long mSettlingStartMillis = null;  // non-null iff the last fix was stable
+    private LocationFix mAnchor = null;  // center of the resting circle (time is unused)
+    private LocationFix mLastRestingFix = null;  // last fix that was in resting state
 
     /** Creates a MotionListener that sends Points to a PointListener. */
     public MotionListener(PointListener target) {
@@ -42,73 +42,74 @@ public class MotionListener implements LocationFixListener {
     @Override public void onLocationFix(LocationFix fix) {
         Log.i(TAG, "onLocationFix: " + fix);
         if (fix == null) return;
+        if (mLastTransitionMillis == null) mLastTransitionMillis = fix.timeMillis;
 
-        // Decide if the location is stable, and note the time it became stable.
+        // Decide whether we are "settling" (waiting to see if we stay within a
+        // small radius around a selected anchor point for a "settling period").
+        boolean enteredSettlingPeriod = false;
         if (isStable(fix)) {
-            if (mStableStartMillis == null || !nearStableFix(mStableFix, fix)) {
-                mStableStartMillis = fix.timeMillis;  // begin a new stable period
-                mStableFix = fix;
+            if (mAnchor != null && withinRestingRadius(mAnchor, fix)) {
+                // We're staying near the anchor; leave the anchor there and
+                // keep waiting for our position to settle.
+                enteredSettlingPeriod = true;
+            } else {
+                // We don't have an anchor or we've moved too far from the anchor;
+                // drop a new anchor here and start a new settling period.
+                mAnchor = fix;
+                mSettlingStartMillis = fix.timeMillis;
+                enteredSettlingPeriod = false;
             }
-            // If the stable fix isn't that accurate, and we get a more accurate
-            // fix, we'd like to improve the stable fix.  But if we keep adjusting
-            // the stable fix too much, it will drift to follow the new fix,
-            // which would allow the new fix to travel much farther than
-            // STABLE_MAX_DISTANCE without being detected as motion.  So, once
-            // the stable fix reaches "good enough" accuracy, stop adjusting.
-            if (mStableFix.latLonSd > GOOD_ENOUGH_ACCURACY &&
-                fix.latLonSd < mStableFix.latLonSd) {
-                mStableFix = fix;
+            // If we have a more accurate fix, we'd like to improve the anchor
+            // position.  But if we keep adjusting the anchor too much, it will
+            // drift to follow new fixes, allowing new fixes to travel much
+            // farther than RESTING_RADIUS without being detected as motion.
+            // So, once the anchor accuracy is "good enough", stop moving it.
+            if (mAnchor.latLonSd > GOOD_ENOUGH_ACCURACY && fix.latLonSd < mAnchor.latLonSd) {
+                mAnchor = fix;
             }
         } else {
-            mStableStartMillis = null;
+            mAnchor = null;
+            mSettlingStartMillis = null;
         }
 
         // Decide if we need to transition to resting or moving.
-        Point point = null;
-        if (mStableStartMillis != null && mStableFix != null &&
-            fix.timeMillis - mStableStartMillis >= STABLE_MIN_MILLIS) {
-            if (mRestingStartMillis == null) {  // transition to resting
-                // The resting segment actually started a little bit in the past,
-                // at mStableStartMillis; indicate that motion ended at that time.
-                if (mMovingStartMillis != null) {
-                    point = Point.createStop(
-                        mStableFix.withTime(mStableStartMillis), mMovingStartMillis);
-                }
-                mRestingStartMillis = mStableStartMillis;
-                mMovingStartMillis = null;
-            }
-        } else {
-            if (mMovingStartMillis == null) {  // transition to moving
-                if (mRestingStartMillis != null && mStableFix != null) {
-                    point = Point.createGo(
-                        mStableFix.withTime(fix.timeMillis), mRestingStartMillis);
-                }
-                mRestingStartMillis = null;
-                mMovingStartMillis = fix.timeMillis;
-            }
+        boolean nextResting = mAnchor != null &&
+            fix.timeMillis - mSettlingStartMillis >= SETTLING_PERIOD_MILLIS;
+
+        if (!isResting && nextResting) {
+            // The resting segment actually started a little bit in the past,
+            // at mSettlingStartMillis; indicate that motion ended at that time.
+            emitPoint(Point.Type.STOP, mAnchor.withTime(mSettlingStartMillis));
+        } else if (isResting && !nextResting) {
+            // The resting segment actually ended a little bit in the past,
+            // at the last fix that met the conditions for resting.
+            emitPoint(Point.Type.GO, mLastRestingFix);
+        } else if (isResting) {
+            emitPoint(Point.Type.RESTING, mAnchor.withTime(fix.timeMillis));
+        } else if (!enteredSettlingPeriod) {
+            // Emit a moving Point only if we're not waiting to settle.
+            emitPoint(Point.Type.MOVING, fix);
         }
 
-        // If we haven't created a special Point for a transition, make
-        // a normal resting or moving Point.
-        if (point == null && mRestingStartMillis != null) {
-            point = Point.createResting(mStableFix.withTime(fix.timeMillis), mRestingStartMillis);
-        }
-        if (point == null && mMovingStartMillis != null) {
-            // Emit a moving Point only if we're not waiting to stabilize.
-            if (mStableStartMillis == null || fix.timeMillis == mStableStartMillis) {
-                point = Point.createMoving(fix, mMovingStartMillis);
-            }
-        }
+        // Advance to the new state.
+        isResting = nextResting;
 
-        // Emit the Point.
-        if (point != null) mTarget.onPoint(point);
+        // Keep track of the last anchor that met the conditions for resting.
+        mLastRestingFix = isResting ? mAnchor.withTime(fix.timeMillis) : null;
+    }
+
+    private void emitPoint(Point.Type type, LocationFix fix) {
+        if (mLastTransitionMillis == null) mLastTransitionMillis = fix.timeMillis;
+        Point point = new Point(type, fix, mLastTransitionMillis);
+        mTarget.onPoint(point);
+        if (point.isTransition()) mLastTransitionMillis = fix.timeMillis;
     }
 
     private boolean isStable(LocationFix fix) {
         return fix.speed < STABLE_MAX_SPEED && fix.latLonSd < STABLE_MAX_ACCURACY;
     }
 
-    private boolean nearStableFix(LocationFix stableFix, LocationFix fix) {
-        return stableFix.distanceTo(fix) < STABLE_MAX_DISTANCE;
+    private boolean withinRestingRadius(LocationFix fix1, LocationFix fix2) {
+        return fix1.distanceTo(fix2) < RESTING_RADIUS;
     }
 }

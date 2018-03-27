@@ -18,15 +18,6 @@ public class LocationAdapter implements LocationListener {
         mTarget = target;
     }
 
-    public long getGpsTimeMillis() {
-        return System.currentTimeMillis() + mGpsTimeOffsetMillis;
-    }
-
-    public void emitLastFix() {
-        mTarget.onLocationFix(
-            mLastFix == null ? null : mLastFix.withTime(getGpsTimeMillis()));
-    }
-
     @Override public void onLocationChanged(Location location) {
         // The phone's clock could be inaccurate.  Whenever we get a Location,
         // we can estimate the offset between the phone's clock and GPS time,
@@ -38,7 +29,7 @@ public class LocationAdapter implements LocationListener {
             location.getLatitude(), location.getLongitude(), location.getAltitude(),
             location.getSpeed(), location.getBearing(), location.getAccuracy()
         );
-        emitLastFix();
+        mTarget.onLocationFix(mLastFix);
     }
 
     @Override public void onStatusChanged(String provider, int status, Bundle extras) {
@@ -51,10 +42,23 @@ public class LocationAdapter implements LocationListener {
         invalidateLastFix();
     }
 
+    /** Sends a fix to the target listener now if there hasn't been one sent
+     in the last durationMillis milliseconds. */
+    public void ensureFixEmittedWithinLast(long durationMillis) {
+        long nowMillis = getGpsTimeMillis();
+        if (nowMillis >= mLastFix.timeMillis + durationMillis) {
+            mTarget.onLocationFix(mLastFix.withTime(nowMillis));
+        }
+    }
+
     private void invalidateLastFix() {
         if (mLastFix != null) {
             mLastFix = null;
-            emitLastFix();
+            mTarget.onLocationFix(null);
         }
+    }
+
+    public long getGpsTimeMillis() {
+        return System.currentTimeMillis() + mGpsTimeOffsetMillis;
     }
 }

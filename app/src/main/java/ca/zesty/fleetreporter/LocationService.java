@@ -46,10 +46,10 @@ import java.util.TreeMap;
         v
     mOutbox (the queue of all points yet to be sent by SMS)
         |
-        |   transmitMessages() (~ once every TRANSMIT_INTERVAL_MILLIS)
-        |       TRANSMIT_INTERVAL_MILLIS should be long enough to receive an
+        |   transmitMessages() (~ once every TRANSMISSION_INTERVAL_MILLIS)
+        |       TRANSMISSION_INTERVAL_MILLIS should be long enough to receive an
         |       SMS delivery acknowledgement before attempting to retransmit,
-        |       and shorter than MotionListener.STABLE_MIN_MILLIS to ensure
+        |       and shorter than MotionListener.SETTLING_PERIOD_MILLIS to ensure
         |       that the message sending rate keeps up with the generation rate.
         v
     SmsManager.sendTextMessage()
@@ -57,10 +57,10 @@ import java.util.TreeMap;
 public class LocationService extends Service implements PointListener {
     static final String TAG = "LocationService";
     static final int NOTIFICATION_ID = 1;
-    static final long LOCATION_INTERVAL_MILLIS = 10 * 1000;
+    static final long LOCATION_INTERVAL_MILLIS = 5 * 1000;
     static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
     static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
-    static final long TRANSMIT_INTERVAL_MILLIS = 30 * 1000;
+    static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
     static final String ACTION_FLEET_REPORTER_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
@@ -69,11 +69,10 @@ public class LocationService extends Service implements PointListener {
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
     private boolean mStarted = false;
     private PowerManager.WakeLock mWakeLock = null;
-    private LocationAdapter mLocationListener = null;
+    private LocationAdapter mLocationAdapter = null;
     private Point mLastPoint = null;
     private Handler mHandler = null;
     private Runnable mRunnable = null;
-    private long mClockOffset = 0;  // GPS time minus System.currentTimeMillis()
     private long mNextRecordMillis = 0;
     private long mNextTransmitMillis = 0;
     private long mNumRecorded = 0;
@@ -104,15 +103,20 @@ public class LocationService extends Service implements PointListener {
             startForeground(NOTIFICATION_ID, buildNotification());
 
             // Activate the GPS receiver.
-            mLocationListener = new LocationAdapter(new MotionListener(this));
+            mLocationAdapter = new LocationAdapter(new MotionListener(this));
             getLocationManager().requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationListener);
+                LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
 
             // Start periodically recording and transmitting points.
             mHandler = new Handler();
             mRunnable = new Runnable() {
                 public void run() {
-                    mLocationListener.emitLastFix();
+                    // Sometimes the GPS provider stops calling onLocationChanged()
+                    // for a long time, if the device is stationary.  To ensure
+                    // that points keep getting recorded regularly, we need to
+                    // emit extra fixes to fill in these gaps.
+                    mLocationAdapter.ensureFixEmittedWithinLast(
+                        LOCATION_INTERVAL_MILLIS * 2);
                     checkWhetherToRecordPoint();
                     checkWhetherToTransmitMessages();
                     mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
@@ -126,7 +130,7 @@ public class LocationService extends Service implements PointListener {
     /** Cleans up when the service is about to stop. */
     @Override public void onDestroy() {
         mHandler.removeCallbacks(mRunnable);
-        getLocationManager().removeUpdates(mLocationListener);
+        getLocationManager().removeUpdates(mLocationAdapter);
         unregisterReceiver(mSmsStatusReceiver);
         if (mWakeLock != null) mWakeLock.release();
         mStarted = false;
@@ -186,7 +190,7 @@ public class LocationService extends Service implements PointListener {
         if (mLastPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
-            if (mLastPoint.isSegmentEnd || getGpsTimeMillis() >= mNextRecordMillis) {
+            if (mLastPoint.isTransition() || getGpsTimeMillis() >= mNextRecordMillis) {
                 recordPoint(mLastPoint);
                 // We want RECORDING_INTERVAL_MILLIS to be the maximum interval
                 // between fix times, so schedule the next time based on the
@@ -216,7 +220,7 @@ public class LocationService extends Service implements PointListener {
     private void checkWhetherToTransmitMessages() {
         if (getGpsTimeMillis() >= mNextTransmitMillis && mOutbox.size() > 0) {
             transmitMessages();
-            mNextTransmitMillis = getGpsTimeMillis() + TRANSMIT_INTERVAL_MILLIS;
+            mNextTransmitMillis = getGpsTimeMillis() + TRANSMISSION_INTERVAL_MILLIS;
         }
     }
 
@@ -259,8 +263,8 @@ public class LocationService extends Service implements PointListener {
     }
 
     private long getGpsTimeMillis() {
-        return mLocationListener == null ?
-            System.currentTimeMillis() : mLocationListener.getGpsTimeMillis();
+        return mLocationAdapter == null ?
+            System.currentTimeMillis() : mLocationAdapter.getGpsTimeMillis();
     }
 
     private LocationManager getLocationManager() {
