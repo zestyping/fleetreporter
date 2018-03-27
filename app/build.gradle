@@ -1,5 +1,27 @@
 apply plugin: 'com.android.application'
 
+ext {
+    getCommandOutput = { String... params ->
+        def buffer = new ByteArrayOutputStream()
+        exec {
+            commandLine params
+            standardOutput = buffer
+        }
+        buffer.toString().trim()
+    }
+
+    getGitCommitCount = { ->
+        Integer.parseInt(getCommandOutput('git', 'rev-list', '--count', 'HEAD'))
+    }
+
+    getGitVersionDescription = { ->
+        getCommandOutput('git', 'describe', '--tags')
+            .replaceAll('^v', '')
+            .replaceAll('-g([0-9a-f]+)', ' ($1)')
+            .replaceAll('-', '+')
+    }
+}
+
 android {
     compileSdkVersion 25
     buildToolsVersion "25.0.2"
@@ -9,8 +31,8 @@ android {
         minSdkVersion 15
         targetSdkVersion 15
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-        versionCode 2
-        versionName "0.2"
+        versionCode getGitCommitCount()
+        versionName getGitVersionDescription()
     }
     buildTypes {
         debug {
