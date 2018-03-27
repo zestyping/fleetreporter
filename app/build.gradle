@@ -15,9 +15,9 @@ ext {
     }
 
     getGitVersionDescription = { ->
-        getCommandOutput('git', 'describe', '--tags')
+        getCommandOutput('git', 'describe', '--tags', '--dirty=*')
             .replaceAll('^v', '')
-            .replaceAll('-g([0-9a-f]+)', ' ($1)')
+            .replaceAll('-g([0-9a-f]+)(\\*?)', '$2 ($1$2)')
             .replaceAll('-', '+')
     }
 }
