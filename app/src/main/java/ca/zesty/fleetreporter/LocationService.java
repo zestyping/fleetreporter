@@ -38,11 +38,13 @@ import java.util.TreeMap;
         |       LOCATION_INTERVAL_MILLIS should be short enough that we can
         |       quickly detect when the device starts or stops moving.
         v
-    mLastPoint (the latest point)
+    mPoint (the latest point)
         |
         |   recordPoint() (~ once every RECORDING_INTERVAL_MILLIS)
         |       RECORDING_INTERVAL_MILLIS is the length of time between points
         |       that will be recorded as a track or plotted on a map.
+        |       RECORDING_INTERVAL_AFTER_GO_MILLIS should be a shorter interval
+        |       used to send a point after a transition from resting to moving.
         v
     mOutbox (the queue of all points yet to be sent by SMS)
         |
@@ -60,6 +62,7 @@ public class LocationService extends Service implements PointListener {
     static final long LOCATION_INTERVAL_MILLIS = 5 * 1000;
     static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
     static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
+    static final long RECORDING_INTERVAL_AFTER_GO_MILLIS = 60 * 1000;
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
@@ -70,7 +73,7 @@ public class LocationService extends Service implements PointListener {
     private boolean mStarted = false;
     private PowerManager.WakeLock mWakeLock = null;
     private LocationAdapter mLocationAdapter = null;
-    private Point mLastPoint = null;
+    private Point mPoint = null;
     private Handler mHandler = null;
     private Runnable mRunnable = null;
     private long mNextRecordMillis = 0;
@@ -181,22 +184,25 @@ public class LocationService extends Service implements PointListener {
     /** Receives a new Point from the MotionListener. */
     public void onPoint(Point point) {
         Log.i(TAG, "onPoint: " + point);
-        mLastPoint = point;
+        mPoint = point;
         checkWhetherToRecordPoint();
     }
 
     /** Examines the last acquired point, and moves it to the outbox if necessary. */
     private void checkWhetherToRecordPoint() {
-        if (mLastPoint != null) {
+        if (mPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
-            if (mLastPoint.isTransition() || getGpsTimeMillis() >= mNextRecordMillis) {
-                recordPoint(mLastPoint);
+            if (mPoint.isTransition() || getGpsTimeMillis() >= mNextRecordMillis) {
+                recordPoint(mPoint);
                 // We want RECORDING_INTERVAL_MILLIS to be the maximum interval
                 // between fix times, so schedule the next time based on the
                 // time elapsed after the fix time, not time elapsed after now.
-                mNextRecordMillis = mLastPoint.fix.timeMillis + RECORDING_INTERVAL_MILLIS;
-                mLastPoint = null;
+                mNextRecordMillis = mPoint.fix.timeMillis + (
+                    mPoint.type == Point.Type.GO ?
+                    RECORDING_INTERVAL_AFTER_GO_MILLIS : RECORDING_INTERVAL_MILLIS
+                );
+                mPoint = null;
             }
         }
     }
@@ -275,10 +281,8 @@ public class LocationService extends Service implements PointListener {
         return (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
-    /**
-     * Gets the appropriate SmsManager to use for sending text messages.
-     * From PataBasi by Kristen Tonga.
-     */
+    /** Gets the appropriate SmsManager to use for sending text messages.
+        From PataBasi by Kristen Tonga. */
     private SmsManager getSmsManager() {
         if (android.os.Build.VERSION.SDK_INT >= 22) {
             int subscriptionId = SmsManager.getDefaultSmsSubscriptionId();
