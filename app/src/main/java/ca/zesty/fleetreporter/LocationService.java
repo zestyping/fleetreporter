@@ -9,6 +9,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.location.GpsStatus;
 import android.location.LocationManager;
 import android.os.Handler;
 import android.os.IBinder;
@@ -59,7 +60,7 @@ import java.util.TreeMap;
 public class LocationService extends Service implements PointListener {
     static final String TAG = "LocationService";
     static final int NOTIFICATION_ID = 1;
-    static final long LOCATION_INTERVAL_MILLIS = 5 * 1000;
+    static final long LOCATION_INTERVAL_MILLIS = 1;// * 1000;
     static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
     static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
     static final long RECORDING_INTERVAL_AFTER_GO_MILLIS = 60 * 1000;
@@ -88,11 +89,7 @@ public class LocationService extends Service implements PointListener {
 
     @Override public void onCreate() {
         super.onCreate();
-
-        // Receive broadcasts of SMS sent notifications.
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_FLEET_REPORTER_SMS_SENT);
-        registerReceiver(mSmsStatusReceiver, filter);
+        registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_FLEET_REPORTER_SMS_SENT));
     }
 
     /** Starts running the service. */
@@ -109,6 +106,9 @@ public class LocationService extends Service implements PointListener {
             mLocationAdapter = new LocationAdapter(new MotionListener(this));
             getLocationManager().requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
+
+            getLocationManager().addNmeaListener(new NmeaMessageListener());
+            getLocationManager().addGpsStatusListener(new GpsStatusListener());
 
             // Start periodically recording and transmitting points.
             mHandler = new Handler();
@@ -217,8 +217,13 @@ public class LocationService extends Service implements PointListener {
         getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
 
         // Show the point in the app's text box.
+        postLogMessage("Recorded:\n    " + point.format());
+    }
+
+    private void postLogMessage(String message) {
         Intent intent = new Intent(MainActivity.ACTION_FLEET_REPORTER_LOG_MESSAGE);
-        intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE, point.format());
+        intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE,
+            Utils.formatUtcTimeSeconds(System.currentTimeMillis()) + " - " + message);
         sendBroadcast(intent);
     }
 
@@ -288,7 +293,7 @@ public class LocationService extends Service implements PointListener {
             int subscriptionId = SmsManager.getDefaultSmsSubscriptionId();
             if (subscriptionId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {  // dual-SIM phone
                 SubscriptionManager subscriptionManager = SubscriptionManager.from(getApplicationContext());
-                subscriptionId = subscriptionManager.getActiveSubscriptionInfoList().get(0).getSubscriptionId();
+                subscriptionId = subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(0).getSubscriptionId();
                 Log.d(TAG, "Dual SIM phone; selected subscriptionId: " + subscriptionId);
             }
             return SmsManager.getSmsManagerForSubscriptionId(subscriptionId);
@@ -298,5 +303,28 @@ public class LocationService extends Service implements PointListener {
 
     private PowerManager getPowerManager() {
         return (PowerManager) getSystemService(Context.POWER_SERVICE);
+    }
+
+    class NmeaMessageListener implements GpsStatus.NmeaListener {
+        public void onNmeaReceived(long timestamp, String nmeaMessage) {
+            if (nmeaMessage.startsWith("$GLGSV")) return;
+            if (nmeaMessage.startsWith("$GPGSV")) return;
+            if (nmeaMessage.startsWith("$GPVTG")) return;
+            //postLogMessage("NMEA at " + Utils.formatUtcTimeSeconds(timestamp) + ":\n    " +
+            //    nmeaMessage);
+        }
+    }
+
+    class GpsStatusListener implements GpsStatus.Listener {
+        public void onGpsStatusChanged(int event) {
+            switch (event) {
+                case GpsStatus.GPS_EVENT_SATELLITE_STATUS:
+                    // postLogMessage("GPS event: Satellite status");
+                    break;
+                case GpsStatus.GPS_EVENT_FIRST_FIX:
+                    // postLogMessage("GPS event: First fix");
+                    break;
+            }
+        }
     }
 }

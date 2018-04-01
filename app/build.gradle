@@ -35,10 +35,6 @@ android {
         versionName getGitVersionDescription()
     }
     buildTypes {
-        debug {
-            minifyEnabled false
-            shrinkResources true
-        }
         release {
             minifyEnabled true
             shrinkResources true

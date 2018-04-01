@@ -26,14 +26,14 @@ import java.util.Locale;
         that have timestamps between lastTransitionMillis and timeMillis.
  */
 public class Point {
+    public final LocationFix fix;
     enum Type { RESTING, MOVING, GO, STOP };
     public final Type type;
-    public final LocationFix fix;
     public final long lastTransitionMillis;  // ms since 1970-01-01 00:00:00 UTC
 
-    public Point(Type type, LocationFix fix, Long lastTransitionMillis) {
-        this.type = type;
+    public Point(LocationFix fix, Type type, Long lastTransitionMillis) {
         this.fix = fix;
+        this.type = type;
         this.lastTransitionMillis = lastTransitionMillis == null ?
             fix.timeMillis : Math.min(fix.timeMillis, lastTransitionMillis);
     }

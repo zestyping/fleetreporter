@@ -1,5 +1,8 @@
 package ca.zesty.fleetreporter;
 
+import android.content.Intent;
+import android.telephony.SmsMessage;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -49,5 +52,13 @@ public class Utils {
             array[i] = list.get(i);
         }
         return array;
+    }
+
+    public static SmsMessage getSmsFromIntent(Intent intent) {
+        Object[] pdus = (Object[]) intent.getExtras().get("pdus");
+        for (Object pdu : pdus) {
+            return SmsMessage.createFromPdu((byte[]) pdu);
+        }
+        return null;
     }
 }

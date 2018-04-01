@@ -79,16 +79,16 @@ public class MotionListener implements LocationFixListener {
         if (!isResting && nextResting) {
             // The resting segment actually started a little bit in the past,
             // at mSettlingStartMillis; indicate that motion ended at that time.
-            emitPoint(Point.Type.STOP, mAnchor.withTime(mSettlingStartMillis));
+            emitPoint(mAnchor.withTime(mSettlingStartMillis), Point.Type.STOP);
         } else if (isResting && !nextResting) {
             // The resting segment actually ended a little bit in the past,
             // at the last fix that met the conditions for resting.
-            emitPoint(Point.Type.GO, mLastRestingFix);
+            emitPoint(mLastRestingFix, Point.Type.GO);
         } else if (isResting) {
-            emitPoint(Point.Type.RESTING, mAnchor.withTime(fix.timeMillis));
+            emitPoint(mAnchor.withTime(fix.timeMillis), Point.Type.RESTING);
         } else if (!enteredSettlingPeriod) {
             // Emit a moving Point only if we're not waiting to settle.
-            emitPoint(Point.Type.MOVING, fix);
+            emitPoint(fix, Point.Type.MOVING);
         }
 
         // Advance to the new state.
@@ -98,9 +98,9 @@ public class MotionListener implements LocationFixListener {
         mLastRestingFix = isResting ? mAnchor.withTime(fix.timeMillis) : null;
     }
 
-    private void emitPoint(Point.Type type, LocationFix fix) {
+    private void emitPoint(LocationFix fix, Point.Type type) {
         if (mLastTransitionMillis == null) mLastTransitionMillis = fix.timeMillis;
-        Point point = new Point(type, fix, mLastTransitionMillis);
+        Point point = new Point(fix, type, mLastTransitionMillis);
         mTarget.onPoint(point);
         if (point.isTransition()) mLastTransitionMillis = fix.timeMillis;
     }

@@ -8,4 +8,16 @@
       android:summary="The mobile number where SMS location reports will be sent"
       android:hint="A mobile number starting with +"
       android:defaultValue="" />
+
+  <EditTextPreference
+      android:key="pref_reporter_label"
+      android:title="Reporter label"
+      android:summary="Do not edit (for debugging only)"
+      android:defaultValue="" />
+
+  <EditTextPreference
+      android:key="pref_reporter_id"
+      android:title="Reporter ID"
+      android:summary="Do not edit (for debugging only)"
+      android:defaultValue="" />
 </PreferenceScreen>

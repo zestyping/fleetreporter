@@ -18,11 +18,11 @@
     android:orientation="horizontal">
 
     <Button
-        android:id="@+id/settings_button"
+        android:id="@+id/register_button"
         android:layout_width="0dp"
         android:layout_weight="1"
         android:layout_height="wrap_content"
-        android:text="Settings" />
+        android:text="Register" />
 
     <Button
         android:id="@+id/start_button"
@@ -38,6 +38,21 @@
         android:layout_height="wrap_content"
         android:text="Stop" />
   </LinearLayout>
+
+  <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="This reporter's label:" />
+
+  <TextView
+      android:id="@+id/reporter_label"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:fontFamily="monospace"
+      android:textSize="32dp"
+      android:focusable="true"
+      android:longClickable="true"
+      android:textIsSelectable="true" />
 
   <TextView
       android:layout_width="match_parent"

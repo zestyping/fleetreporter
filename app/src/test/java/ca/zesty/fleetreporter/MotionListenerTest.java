@@ -109,28 +109,28 @@ public class MotionListenerTest implements PointListener {
     private void assertRestingPoint(
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a resting point " + situation,
-            new Point(Point.Type.RESTING, fix.withTime(timeMillis), lastTransitionMillis),
+            new Point(fix.withTime(timeMillis), Point.Type.RESTING, lastTransitionMillis),
             expectOnePoint());
     }
 
     private void assertGoPoint(
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a go point " + situation,
-            new Point(Point.Type.GO, fix.withTime(timeMillis), lastTransitionMillis),
+            new Point(fix.withTime(timeMillis), Point.Type.GO, lastTransitionMillis),
             expectOnePoint());
     }
 
     private void assertMovingPoint(
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a moving point " + situation,
-            new Point(Point.Type.MOVING, fix.withTime(timeMillis), lastTransitionMillis),
+            new Point(fix.withTime(timeMillis), Point.Type.MOVING, lastTransitionMillis),
             expectOnePoint());
     }
 
     private void assertStopPoint(
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a stop point " + situation,
-            new Point(Point.Type.STOP, fix.withTime(timeMillis), lastTransitionMillis),
+            new Point(fix.withTime(timeMillis), Point.Type.STOP, lastTransitionMillis),
             expectOnePoint());
     }
 
