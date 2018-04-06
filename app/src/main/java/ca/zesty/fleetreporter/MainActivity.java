@@ -3,27 +3,20 @@ package ca.zesty.fleetreporter;
 import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.app.AppCompatActivity;
-import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
-import android.telephony.SubscriptionManager;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.TextView;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends BaseActivity {
     static final String TAG = "MainActivity";
     static final String ACTION_SMS_RECEIVED = "android.provider.Telephony.SMS_RECEIVED";
     public static final String ACTION_FLEET_REPORTER_LOG_MESSAGE = "FLEET_REPORTER_LOG_MESSAGE";
@@ -48,7 +41,8 @@ public class MainActivity extends AppCompatActivity {
             Manifest.permission.WAKE_LOCK
         }, 0);
 
-        final Intent serviceIntent = new Intent(getApplicationContext(), LocationService.class);
+        final Intent serviceIntent = new Intent(
+            getApplicationContext(), LocationService.class);
 
         findViewById(R.id.register_button).setOnClickListener(
             new View.OnClickListener() {
@@ -61,14 +55,12 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.start_button).setOnClickListener(
             new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    if (Prefs.getDestinationNumber(MainActivity.this).isEmpty()) {
-                        new AlertDialog.Builder(MainActivity.this)
-                            .setTitle("No destination number")
-                            .setMessage("Please enter a destination number in the Settings.")
-                            .setPositiveButton("OK", null)
-                            .show();
-                    } else {
+                    if (isRegistered()) {
                         startService(serviceIntent);
+                    } else {
+                        u.showMessageBox(
+                            "Not registered",
+                            "Please register this reporter with a receiver first.");
                     }
                 }
             }
@@ -84,6 +76,7 @@ public class MainActivity extends AppCompatActivity {
 
         registerReceiver(mLogMessageReceiver, new IntentFilter(ACTION_FLEET_REPORTER_LOG_MESSAGE));
         registerReceiver(mSmsAssignReceiver, new IntentFilter(ACTION_SMS_RECEIVED));
+        updateRegistrationCard();
     }
 
     @Override protected void onDestroy() {
@@ -97,46 +90,43 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.action_settings: {
-                startActivity(new Intent(this, SettingsActivity.class));
-                break;
-            }
+        if (item.getItemId() == R.id.action_settings) {
+            startActivity(new Intent(this, SettingsActivity.class));
         }
         return false;
     }
 
-    private void registerReporter() {
-        final EditText numberView = new EditText(MainActivity.this);
-        numberView.setHint("A mobile number starting with +");
-        new android.app.AlertDialog.Builder(MainActivity.this)
-            .setTitle("Registration")
-            .setMessage("Fleet Receiver's mobile number:")
-            .setView(numberView)
-            .setPositiveButton("Register", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                    String destination = numberView.getText().toString();
-                    getSmsManager().sendTextMessage(destination, null, "fleet register", null, null);
-                }
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-
+    private boolean isRegistered() {
+        return !u.getPref(Prefs.DESTINATION_NUMBER).isEmpty() &&
+            !u.getPref(Prefs.REPORTER_ID).isEmpty() &&
+            !u.getPref(Prefs.REPORTER_LABEL).isEmpty();
     }
 
-    /** Gets the appropriate SmsManager to use for sending text messages.
-     From PataBasi by Kristen Tonga. */
-    private SmsManager getSmsManager() {
-        if (android.os.Build.VERSION.SDK_INT >= 22) {
-            int subscriptionId = SmsManager.getDefaultSmsSubscriptionId();
-            if (subscriptionId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {  // dual-SIM phone
-                SubscriptionManager subscriptionManager = SubscriptionManager.from(getApplicationContext());
-                subscriptionId = subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(0).getSubscriptionId();
-                Log.d(TAG, "Dual SIM phone; selected subscriptionId: " + subscriptionId);
-            }
-            return SmsManager.getSmsManagerForSubscriptionId(subscriptionId);
+    private void updateRegistrationCard() {
+        if (isRegistered()) {
+            u.setText(R.id.registration_status, "Registered as:");
+            u.show(R.id.reporter_label);
+            u.setText(R.id.reporter_label, u.getPref(Prefs.REPORTER_LABEL));
+        } else {
+            u.setText(R.id.registration_status, "Unregistered");
+            u.hide(R.id.reporter_label);
         }
-        return SmsManager.getDefault();
+    }
+
+    private void registerReporter() {
+        String destinationNumber = u.getPref(Prefs.DESTINATION_NUMBER).trim();
+        if (destinationNumber.isEmpty()) destinationNumber = "+";
+        u.promptForString(
+            "Registration",
+            "Receiver's mobile number:",
+            destinationNumber,
+            new Utils.StringCallback() {
+                public void run(String mobileNumber) {
+                    if (mobileNumber == null) return;
+                    u.sendSms(mobileNumber, "fleet register");
+                }
+            }
+        );
     }
 
     class LogMessageReceiver extends BroadcastReceiver {
@@ -151,7 +141,8 @@ public class MainActivity extends AppCompatActivity {
     /** Handles incoming SMS messages for reported locations. */
     class SmsAssignReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            final Pattern PATTERN_ASSIGN = Pattern.compile("^fleet assign ([0-9a-zA-Z]+) +(.*)");
+            final Pattern PATTERN_ASSIGN = Pattern.compile(
+                "^fleet assign ([0-9a-zA-Z]+) +(.*)");
 
             SmsMessage sms = Utils.getSmsFromIntent(intent);
             if (sms == null) return;
@@ -167,13 +158,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private void assignReporter(String receiverNumber, String reporterId, String label) {
-            Prefs.setDestinationNumber(MainActivity.this, receiverNumber);
-            Prefs.setReporterId(MainActivity.this, reporterId);
-            Prefs.setReporterLabel(MainActivity.this, label);
-            getSmsManager().sendTextMessage(receiverNumber, null, "fleet activate " + reporterId, null, null);
-            String message = "Reporter assigned: \"" + label + "\" (id: " + reporterId + ")";
-            ((TextView) findViewById(R.id.message_log)).append(message + "\n");
-            ((TextView) findViewById(R.id.reporter_label)).setText(label);
+            u.setPref(Prefs.DESTINATION_NUMBER, receiverNumber);
+            u.setPref(Prefs.REPORTER_ID, reporterId);
+            u.setPref(Prefs.REPORTER_LABEL, label);
+            u.sendSms(receiverNumber, "fleet activate " + reporterId);
+            updateRegistrationCard();
         }
     }
 }

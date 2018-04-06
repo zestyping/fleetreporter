@@ -2,9 +2,7 @@ package ca.zesty.fleetreporter;
 
 import android.app.Activity;
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -12,12 +10,8 @@ import android.content.IntentFilter;
 import android.location.GpsStatus;
 import android.location.LocationManager;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.PowerManager;
-import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
-import android.telephony.SmsManager;
-import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -57,7 +51,7 @@ import java.util.TreeMap;
         v
     SmsManager.sendTextMessage()
  */
-public class LocationService extends Service implements PointListener {
+public class LocationService extends BaseService implements PointListener {
     static final String TAG = "LocationService";
     static final int NOTIFICATION_ID = 1;
     static final long LOCATION_INTERVAL_MILLIS = 1;// * 1000;
@@ -97,18 +91,18 @@ public class LocationService extends Service implements PointListener {
         if (!mStarted) {
             // Grab the CPU.
             mStarted = true;
-            mWakeLock = getPowerManager().newWakeLock(
+            mWakeLock = u.getPowerManager().newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
             mWakeLock.acquire();
             startForeground(NOTIFICATION_ID, buildNotification());
 
             // Activate the GPS receiver.
             mLocationAdapter = new LocationAdapter(new MotionListener(this));
-            getLocationManager().requestLocationUpdates(
+            u.getLocationManager().requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
 
-            getLocationManager().addNmeaListener(new NmeaMessageListener());
-            getLocationManager().addGpsStatusListener(new GpsStatusListener());
+            u.getLocationManager().addNmeaListener(new NmeaMessageListener());
+            u.getLocationManager().addGpsStatusListener(new GpsStatusListener());
 
             // Start periodically recording and transmitting points.
             mHandler = new Handler();
@@ -133,7 +127,7 @@ public class LocationService extends Service implements PointListener {
     /** Cleans up when the service is about to stop. */
     @Override public void onDestroy() {
         mHandler.removeCallbacks(mRunnable);
-        getLocationManager().removeUpdates(mLocationAdapter);
+        u.getLocationManager().removeUpdates(mLocationAdapter);
         unregisterReceiver(mSmsStatusReceiver);
         if (mWakeLock != null) mWakeLock.release();
         mStarted = false;
@@ -148,7 +142,7 @@ public class LocationService extends Service implements PointListener {
                     mNumSent += 1;
                     mOutbox.remove(key);
                 }
-                getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
+                u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
             } else {
                 Log.i(TAG, "failed to send SMS message");
             }
@@ -214,7 +208,7 @@ public class LocationService extends Service implements PointListener {
         mNumRecorded += 1;
         limitOutboxSize();
         checkWhetherToTransmitMessages();
-        getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
+        u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
 
         // Show the point in the app's text box.
         postLogMessage("Recorded:\n    " + point.format());
@@ -237,6 +231,8 @@ public class LocationService extends Service implements PointListener {
 
     /** Transmits some of the pending points in the outbox over SMS. */
     private void transmitMessages() {
+        String destination = u.getPref(Prefs.DESTINATION_NUMBER);
+        if (destination == null) return;
         String message = "";
         List<Long> sentKeys = new ArrayList<>();
         for (Long key : mOutbox.keySet()) {
@@ -248,18 +244,8 @@ public class LocationService extends Service implements PointListener {
                    "sending " + TextUtils.join(", ", sentKeys));
         Intent intent = new Intent(ACTION_FLEET_REPORTER_SMS_SENT);
         intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
-        sendSms(Prefs.getDestinationNumber(this), message.trim(),
-            PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_ONE_SHOT));
-    }
-
-    /** Sends an SMS message. */
-    private void sendSms(String destination, String message, PendingIntent sentIntent) {
-        if (destination.isEmpty()) {
-            Log.i(TAG, "Cannot send SMS; destination number is not set");
-            return;
-        }
         Log.i(TAG, "SMS to " + destination + ": " + message);
-        getSmsManager().sendTextMessage(destination, null, message, sentIntent, null);
+        u.sendSms(destination, message.trim(), intent);
     }
 
     /** Ensure the outbox contains no more than MAX_OUTBOX_SIZE entries. */
@@ -269,40 +255,9 @@ public class LocationService extends Service implements PointListener {
         }
     }
 
-    @Nullable @Override public IBinder onBind(Intent intent) {
-        return null;
-    }
-
     private long getGpsTimeMillis() {
         return mLocationAdapter == null ?
             System.currentTimeMillis() : mLocationAdapter.getGpsTimeMillis();
-    }
-
-    private LocationManager getLocationManager() {
-        return (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-    }
-
-    private NotificationManager getNotificationManager() {
-        return (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-    }
-
-    /** Gets the appropriate SmsManager to use for sending text messages.
-        From PataBasi by Kristen Tonga. */
-    private SmsManager getSmsManager() {
-        if (android.os.Build.VERSION.SDK_INT >= 22) {
-            int subscriptionId = SmsManager.getDefaultSmsSubscriptionId();
-            if (subscriptionId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {  // dual-SIM phone
-                SubscriptionManager subscriptionManager = SubscriptionManager.from(getApplicationContext());
-                subscriptionId = subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(0).getSubscriptionId();
-                Log.d(TAG, "Dual SIM phone; selected subscriptionId: " + subscriptionId);
-            }
-            return SmsManager.getSmsManagerForSubscriptionId(subscriptionId);
-        }
-        return SmsManager.getDefault();
-    }
-
-    private PowerManager getPowerManager() {
-        return (PowerManager) getSystemService(Context.POWER_SERVICE);
     }
 
     class NmeaMessageListener implements GpsStatus.NmeaListener {

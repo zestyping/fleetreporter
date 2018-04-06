@@ -14,25 +14,33 @@ ext {
         Integer.parseInt(getCommandOutput('git', 'rev-list', '--count', 'HEAD'))
     }
 
+    // The "dirty" and "patch" indicators must both sort after ".", with the
+    // "dirty" indicator coming first.  Alas, all the punctuation characters
+    // after "." are special to the shell except ":", "=", "@", "^", "_", "~",
+    // which are mysterious or hard to pronounce.  So let's use "d" and "p".
     getGitVersionDescription = { ->
-        getCommandOutput('git', 'describe', '--tags', '--dirty=+')
-            .replaceAll('^v', '')
-            .replaceAll('-g([0-9a-f]+)(\\+?)', '$2 ($1$2)')
-            .replaceAll('-', 'p')
+        getCommandOutput('git', 'describe', '--tags', '--dirty=@')
+                .replaceAll('^v', '')
+                .replaceAll('-g([0-9a-f]+)(@?)', '$2 ($1$2)')
+                .replaceAll('@', 'd')
+                .replaceAll('-', 'p')
     }
 }
 
 android {
-    compileSdkVersion 25
-    buildToolsVersion "25.0.2"
+    compileSdkVersion 26
+    buildToolsVersion "26.0.0"
 
     defaultConfig {
         applicationId "ca.zesty.fleetreporter"
         minSdkVersion 15
-        targetSdkVersion 15
+        targetSdkVersion 26
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         versionCode getGitCommitCount()
         versionName getGitVersionDescription()
+    }
+    packagingOptions {
+        exclude 'META-INF/services/org.xmlpull.v1.XmlPullParserFactory'
     }
     buildTypes {
         release {
@@ -41,18 +49,18 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    packagingOptions {
-        exclude 'META-INF/services/org.xmlpull.v1.XmlPullParserFactory'
-    }
 }
 
 dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
-    compile 'com.android.support:appcompat-v7:25.3.1'
-    compile 'com.android.support:support-annotations:25.4.0'
+    compile 'com.android.support:appcompat-v7:26.1.0'
+    compile 'com.android.support:cardview-v7:26.1.0'
+    compile 'com.android.support:support-annotations:26.1.0'
     testCompile 'junit:junit:4.12'
     androidTestCompile 'junit:junit:4.12'
-    androidTestCompile 'com.android.support.test:runner:1.0.1'
+    androidTestCompile 'com.android.support.test:runner:1.0.1', {
+        exclude group: 'com.android.support', module: 'support-annotations'
+    }
 }
 
 task copyDebugApk {
