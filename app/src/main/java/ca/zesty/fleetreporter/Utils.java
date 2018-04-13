@@ -142,11 +142,12 @@ public class Utils {
 
     // ==== CONTEXT-DEPENDENT ====
 
-    private Context context;
-    private Activity activity;
+    public final Context context;
+    public final Activity activity;
 
     public Utils(Context context) {
         this.context = context;
+        this.activity = null;
     }
 
     public Utils(Activity activity) {

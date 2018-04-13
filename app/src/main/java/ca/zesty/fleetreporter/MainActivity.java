@@ -23,7 +23,9 @@ public class MainActivity extends BaseActivity {
     public static final String EXTRA_LOG_MESSAGE = "LOG_MESSAGE";
 
     private LogMessageReceiver mLogMessageReceiver = new LogMessageReceiver();
+    private ServiceChangedReceiver mServiceChangedReceiver = new ServiceChangedReceiver();
     private SmsAssignReceiver mSmsAssignReceiver = new SmsAssignReceiver();
+    private String mLastDestinationNumber = "";
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -41,9 +43,6 @@ public class MainActivity extends BaseActivity {
             Manifest.permission.WAKE_LOCK
         }, 0);
 
-        final Intent serviceIntent = new Intent(
-            getApplicationContext(), LocationService.class);
-
         findViewById(R.id.register_button).setOnClickListener(
             new View.OnClickListener() {
                 @Override public void onClick(View v) {
@@ -52,31 +51,18 @@ public class MainActivity extends BaseActivity {
             }
         );
 
-        findViewById(R.id.start_button).setOnClickListener(
+        findViewById(R.id.unpause_button).setOnClickListener(
             new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    if (isRegistered()) {
-                        startService(serviceIntent);
-                    } else {
-                        u.showMessageBox(
-                            "Not registered",
-                            "Please register this reporter with a receiver first.");
-                    }
-                }
-            }
-        );
-
-        findViewById(R.id.stop_button).setOnClickListener(
-            new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    stopService(serviceIntent);
+                    startService(new Intent(u.context, LocationService.class));
                 }
             }
         );
 
         registerReceiver(mLogMessageReceiver, new IntentFilter(ACTION_FLEET_REPORTER_LOG_MESSAGE));
+        registerReceiver(mServiceChangedReceiver, new IntentFilter(LocationService.ACTION_FLEET_REPORTER_SERVICE_CHANGED));
         registerReceiver(mSmsAssignReceiver, new IntentFilter(ACTION_SMS_RECEIVED));
-        updateRegistrationCard();
+        updateUiMode();
     }
 
     @Override protected void onDestroy() {
@@ -90,6 +76,12 @@ public class MainActivity extends BaseActivity {
     }
 
     @Override public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_register) {
+            registerReporter();
+        }
+        if (item.getItemId() == R.id.action_pause) {
+            stopService(new Intent(this, LocationService.class));
+        }
         if (item.getItemId() == R.id.action_settings) {
             startActivity(new Intent(this, SettingsActivity.class));
         }
@@ -102,19 +94,32 @@ public class MainActivity extends BaseActivity {
             !u.getPref(Prefs.REPORTER_LABEL).isEmpty();
     }
 
-    private void updateRegistrationCard() {
+    private void updateUiMode() {
         if (isRegistered()) {
-            u.setText(R.id.registration_status, "Registered as:");
+            if (LocationService.isRunning) {
+                u.setText(R.id.mode_label, "Reporting as:");
+                u.show(R.id.reporting_frame);
+                u.hide(R.id.unpause_button);
+            } else {
+                u.setText(R.id.mode_label, "Reporting is paused!");
+                u.hide(R.id.reporting_frame);
+                u.show(R.id.unpause_button);
+            }
             u.show(R.id.reporter_label);
             u.setText(R.id.reporter_label, u.getPref(Prefs.REPORTER_LABEL));
+            u.hide(R.id.register_button);
         } else {
-            u.setText(R.id.registration_status, "Unregistered");
+            u.setText(R.id.mode_label, "Not yet registered");
             u.hide(R.id.reporter_label);
+            u.show(R.id.register_button);
+            u.hide(R.id.reporting_frame);
+            u.hide(R.id.unpause_button);
         }
     }
 
     private void registerReporter() {
         String destinationNumber = u.getPref(Prefs.DESTINATION_NUMBER).trim();
+        if (destinationNumber.isEmpty()) destinationNumber = mLastDestinationNumber;
         if (destinationNumber.isEmpty()) destinationNumber = "+";
         u.promptForString(
             "Registration",
@@ -123,6 +128,7 @@ public class MainActivity extends BaseActivity {
             new Utils.StringCallback() {
                 public void run(String mobileNumber) {
                     if (mobileNumber == null) return;
+                    mLastDestinationNumber = mobileNumber;
                     u.sendSms(mobileNumber, "fleet register");
                 }
             }
@@ -135,6 +141,12 @@ public class MainActivity extends BaseActivity {
                 String message = intent.getStringExtra(EXTRA_LOG_MESSAGE);
                 ((TextView) findViewById(R.id.message_log)).append(message + "\n");
             }
+        }
+    }
+
+    class ServiceChangedReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            updateUiMode();
         }
     }
 
@@ -162,7 +174,7 @@ public class MainActivity extends BaseActivity {
             u.setPref(Prefs.REPORTER_ID, reporterId);
             u.setPref(Prefs.REPORTER_LABEL, label);
             u.sendSms(receiverNumber, "fleet activate " + reporterId);
-            updateRegistrationCard();
+            startService(new Intent(u.context, LocationService.class));
         }
     }
 }

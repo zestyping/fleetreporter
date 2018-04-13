@@ -52,6 +52,8 @@ import java.util.TreeMap;
     SmsManager.sendTextMessage()
  */
 public class LocationService extends BaseService implements PointListener {
+    public static boolean isRunning = false;
+
     static final String TAG = "LocationService";
     static final int NOTIFICATION_ID = 1;
     static final long LOCATION_INTERVAL_MILLIS = 1000;
@@ -59,11 +61,11 @@ public class LocationService extends BaseService implements PointListener {
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
+    static final String ACTION_FLEET_REPORTER_SERVICE_CHANGED = "FLEET_REPORTER_SERVICE_CHANGED";
     static final String ACTION_FLEET_REPORTER_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
     static final String EXTRA_SENT_KEYS = "SENT_KEYS";
 
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
-    private boolean mStarted = false;
     private PowerManager.WakeLock mWakeLock = null;
     private LocationAdapter mLocationAdapter = null;
     private Point mPoint = null;
@@ -86,9 +88,9 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (!mStarted) {
+        if (!isRunning) {
             // Grab the CPU.
-            mStarted = true;
+            isRunning = true;
             mWakeLock = u.getPowerManager().newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
             mWakeLock.acquire();
@@ -118,6 +120,7 @@ public class LocationService extends BaseService implements PointListener {
                 }
             };
             mHandler.postDelayed(mRunnable, 0);
+            sendBroadcast(new Intent(ACTION_FLEET_REPORTER_SERVICE_CHANGED));
         }
         return START_STICKY;
     }
@@ -128,7 +131,8 @@ public class LocationService extends BaseService implements PointListener {
         u.getLocationManager().removeUpdates(mLocationAdapter);
         unregisterReceiver(mSmsStatusReceiver);
         if (mWakeLock != null) mWakeLock.release();
-        mStarted = false;
+        isRunning = false;
+        sendBroadcast(new Intent(ACTION_FLEET_REPORTER_SERVICE_CHANGED));
     }
 
     class SmsStatusReceiver extends BroadcastReceiver {

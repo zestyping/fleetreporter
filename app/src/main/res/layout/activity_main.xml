@@ -11,34 +11,6 @@
     android:paddingTop="@dimen/activity_vertical_margin"
     tools:context="ca.zesty.fleetreporter.MainActivity">
 
-  <LinearLayout
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:paddingBottom="@dimen/activity_vertical_margin"
-    android:orientation="horizontal">
-
-    <Button
-        android:id="@+id/register_button"
-        android:layout_width="0dp"
-        android:layout_weight="1"
-        android:layout_height="wrap_content"
-        android:text="Register" />
-
-    <Button
-        android:id="@+id/start_button"
-        android:layout_width="0dp"
-        android:layout_weight="1"
-        android:layout_height="wrap_content"
-        android:text="Start" />
-
-    <Button
-        android:id="@+id/stop_button"
-        android:layout_width="0dp"
-        android:layout_weight="1"
-        android:layout_height="wrap_content"
-        android:text="Stop" />
-  </LinearLayout>
-
   <android.support.v7.widget.CardView
       android:layout_width="fill_parent"
       android:layout_height="wrap_content"
@@ -52,17 +24,17 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/registration_status"
+          android:id="@+id/mode_label"
           android:layout_width="match_parent"
           android:layout_height="wrap_content"
           android:text="Registered as:"
-          android:textSize="18dp" />
+          android:textSize="18sp" />
 
       <TextView
           android:id="@+id/reporter_label"
           android:layout_width="match_parent"
           android:layout_height="wrap_content"
-          android:textSize="32dp"
+          android:textSize="32sp"
           android:focusable="true"
           android:longClickable="true"
           android:textIsSelectable="true" />
@@ -70,18 +42,44 @@
 
   </android.support.v7.widget.CardView>
 
-  <TextView
+  <Button
+      android:id="@+id/register_button"
       android:layout_width="match_parent"
-      android:layout_height="wrap_content"
-      android:text="Recorded points:"
-      android:textSize="14dp" />
+      android:layout_height="0dp"
+      android:layout_weight="1"
+      android:textSize="32sp"
+      android:text="Register now" />
 
-  <TextView
-      android:id="@+id/message_log"
+  <Button
+      android:id="@+id/unpause_button"
       android:layout_width="match_parent"
-      android:layout_height="fill_parent"
-      android:textSize="10dp"
-      android:focusable="true"
-      android:longClickable="true"
-      android:textIsSelectable="true" />
+      android:layout_height="0dp"
+      android:layout_weight="1"
+      android:textSize="32sp"
+      android:text="Unpause" />
+
+  <LinearLayout
+      android:id="@+id/reporting_frame"
+      android:layout_width="match_parent"
+      android:layout_height="0dp"
+      android:layout_weight="1"
+      android:orientation="vertical">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Recorded points:"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/message_log"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:textSize="10sp"
+        android:focusable="true"
+        android:longClickable="true"
+        android:textIsSelectable="true" />
+  </LinearLayout>
+
 </LinearLayout>
