@@ -35,10 +35,10 @@ import java.util.TreeMap;
         v
     mPoint (the latest point)
         |
-        |   recordPoint() (~ once every RECORDING_INTERVAL_MILLIS)
-        |       RECORDING_INTERVAL_MILLIS is the length of time between points
+        |   recordPoint() (~ once every pref_recording_interval minutes)
+        |       pref_recording_interval sets the length of time between points
         |       that will be recorded as a track or plotted on a map.
-        |       RECORDING_INTERVAL_AFTER_GO_MILLIS should be a shorter interval
+        |       pref_recording_interval_after_go should be a shorter interval
         |       used to send a point after a transition from resting to moving.
         v
     mOutbox (the queue of all points yet to be sent by SMS)
@@ -54,10 +54,8 @@ import java.util.TreeMap;
 public class LocationService extends BaseService implements PointListener {
     static final String TAG = "LocationService";
     static final int NOTIFICATION_ID = 1;
-    static final long LOCATION_INTERVAL_MILLIS = 1;// * 1000;
+    static final long LOCATION_INTERVAL_MILLIS = 1000;
     static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
-    static final long RECORDING_INTERVAL_MILLIS = 10 * 60 * 1000;
-    static final long RECORDING_INTERVAL_AFTER_GO_MILLIS = 60 * 1000;
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
@@ -189,12 +187,14 @@ public class LocationService extends BaseService implements PointListener {
             // point immediately; otherwise wait until we're next scheduled to record.
             if (mPoint.isTransition() || getGpsTimeMillis() >= mNextRecordMillis) {
                 recordPoint(mPoint);
-                // We want RECORDING_INTERVAL_MILLIS to be the maximum interval
+
+                // We want pref_recording_interval to be the maximum interval
                 // between fix times, so schedule the next time based on the
                 // time elapsed after the fix time, not time elapsed after now.
                 mNextRecordMillis = mPoint.fix.timeMillis + (
                     mPoint.type == Point.Type.GO ?
-                    RECORDING_INTERVAL_AFTER_GO_MILLIS : RECORDING_INTERVAL_MILLIS
+                        u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_AFTER_GO, 1) :
+                        u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL, 10)
                 );
                 mPoint = null;
             }

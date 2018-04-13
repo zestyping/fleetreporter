@@ -5,19 +5,24 @@
   <EditTextPreference
       android:key="pref_destination_number"
       android:title="Destination number"
-      android:summary="The mobile number where SMS location reports will be sent"
+      android:summary="Mobile number where SMS location reports will be sent"
       android:hint="A mobile number starting with +"
       android:defaultValue="" />
 
   <EditTextPreference
-      android:key="pref_reporter_label"
-      android:title="Reporter label"
-      android:summary="Do not edit (for debugging only)"
-      android:defaultValue="" />
+      android:key="pref_recording_interval"
+      android:title="Recording interval"
+      android:summary="Maximum number of minutes between recorded points"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="10" />
 
   <EditTextPreference
-      android:key="pref_reporter_id"
-      android:title="Reporter ID"
-      android:summary="Do not edit (for debugging only)"
-      android:defaultValue="" />
+      android:key="pref_recording_interval_after_go"
+      android:title="Recording interval after starting to move"
+      android:summary="Number of minutes after departing from a stop to record an extra point"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="1" />
+
 </PreferenceScreen>

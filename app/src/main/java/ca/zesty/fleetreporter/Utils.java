@@ -222,6 +222,14 @@ public class Utils {
         return getPrefs().getString(key, defaultValue);
     }
 
+    public long getMinutePrefInMillis(String key, double defaultMinutes) {
+        double minutes = defaultMinutes;
+        try {
+            minutes = Double.valueOf(getPrefs().getString(key, "x"));
+        } catch (NumberFormatException e) { }
+        return Math.round(minutes * 60 * 1000);
+    }
+
     public void setPref(String key, String value) {
         getPrefs().edit().putString(key, value).commit();
     }
