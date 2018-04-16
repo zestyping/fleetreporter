@@ -21,10 +21,10 @@ public class MotionListener implements LocationFixListener {
     // close together (within RESTING_RADIUS of a selected anchor location).
 
     static final double STABLE_MAX_ACCURACY = 50.0;  // meters
-    static final double STABLE_MAX_SPEED = 2.0;  // meters per second
+    static final double STABLE_MAX_SPEED = 5.0;  // km/h
     static final long SETTLING_PERIOD_MILLIS = 60 * 1000;  // one minute
     static final double RESTING_RADIUS = 20.0;  // meters
-    static final double GOOD_ENOUGH_ACCURACY = 10.0;  // meters
+    static final double GOOD_ENOUGH_ANCHOR_ACCURACY = 10.0;  // meters
 
     private final PointListener mTarget;
     private boolean isResting = false;  // current state, either "resting" or "moving"
@@ -41,7 +41,10 @@ public class MotionListener implements LocationFixListener {
 
     @Override public void onLocationFix(LocationFix fix) {
         Log.i(TAG, "onLocationFix: " + fix);
-        if (fix == null) return;
+        if (fix == null) {
+            emitNullPoint();
+            return;
+        }
         if (mLastTransitionMillis == null) mLastTransitionMillis = fix.timeMillis;
 
         // Decide whether we are "settling" (waiting to see if we stay within a
@@ -64,7 +67,7 @@ public class MotionListener implements LocationFixListener {
             // drift to follow new fixes, allowing new fixes to travel much
             // farther than RESTING_RADIUS without being detected as motion.
             // So, once the anchor accuracy is "good enough", stop moving it.
-            if (mAnchor.latLonSd > GOOD_ENOUGH_ACCURACY && fix.latLonSd < mAnchor.latLonSd) {
+            if (mAnchor.latLonSd > GOOD_ENOUGH_ANCHOR_ACCURACY && fix.latLonSd < mAnchor.latLonSd) {
                 mAnchor = fix;
             }
         } else {
@@ -86,9 +89,9 @@ public class MotionListener implements LocationFixListener {
             emitPoint(mLastRestingFix, Point.Type.GO);
         } else if (isResting) {
             emitPoint(mAnchor.withTime(fix.timeMillis), Point.Type.RESTING);
-        } else if (!enteredSettlingPeriod) {
-            // Emit a moving Point only if we're not waiting to settle.
-            emitPoint(fix, Point.Type.MOVING);
+        } else {
+            // A moving Point is provisional if we're waiting to settle.
+            emitPoint(fix, Point.Type.MOVING, enteredSettlingPeriod);
         }
 
         // Advance to the new state.
@@ -98,15 +101,23 @@ public class MotionListener implements LocationFixListener {
         mLastRestingFix = isResting ? mAnchor.withTime(fix.timeMillis) : null;
     }
 
+    private void emitNullPoint() {
+        mTarget.onPoint(null, false);
+    }
+
     private void emitPoint(LocationFix fix, Point.Type type) {
+        emitPoint(fix, type, false);
+    }
+
+    private void emitPoint(LocationFix fix, Point.Type type, boolean isProvisional) {
         if (mLastTransitionMillis == null) mLastTransitionMillis = fix.timeMillis;
         Point point = new Point(fix, type, mLastTransitionMillis);
-        mTarget.onPoint(point);
+        mTarget.onPoint(point, isProvisional);
         if (point.isTransition()) mLastTransitionMillis = fix.timeMillis;
     }
 
     private boolean isStable(LocationFix fix) {
-        return fix.speed < STABLE_MAX_SPEED && fix.latLonSd < STABLE_MAX_ACCURACY;
+        return fix.speedKmh < STABLE_MAX_SPEED && fix.latLonSd < STABLE_MAX_ACCURACY;
     }
 
     private boolean withinRestingRadius(LocationFix fix1, LocationFix fix2) {

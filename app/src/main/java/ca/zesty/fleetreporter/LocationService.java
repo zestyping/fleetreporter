@@ -61,20 +61,29 @@ public class LocationService extends BaseService implements PointListener {
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
-    static final String ACTION_FLEET_REPORTER_SERVICE_CHANGED = "FLEET_REPORTER_SERVICE_CHANGED";
-    static final String ACTION_FLEET_REPORTER_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
-    static final String EXTRA_SENT_KEYS = "SENT_KEYS";
+    static final String ACTION_POINT_RECEIVED = "FLEET_REPORTER_POINT_RECEIVED";
+    static final String ACTION_SERVICE_CHANGED = "FLEET_REPORTER_SERVICE_CHANGED";
+    static final String ACTION_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
+    static final String EXTRA_SENT_KEYS = "sent_keys";
 
-    private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
-    private PowerManager.WakeLock mWakeLock = null;
-    private LocationAdapter mLocationAdapter = null;
-    private Point mPoint = null;
     private Handler mHandler = null;
     private Runnable mRunnable = null;
+    private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
+    private PowerManager.WakeLock mWakeLock = null;
+
+    private LocationAdapter mLocationAdapter = null;
+    private Point mPoint = null;  // non-provisional, null means no GPS
+    private LocationFix mLastFix = null;  // possibly provisional, never null after first assigned
+    private LocationFix mDistanceAnchor = null;
+    private double mMetersTravelledSinceStop = 0;
+    private Long mNoGpsSinceTimeMillis = null;
+
     private long mNextRecordMillis = 0;
     private long mNextTransmitMillis = 0;
     private long mNumRecorded = 0;
     private long mNumSent = 0;
+    private Long mLastSmsSentMillis = null;
+    private Long mSmsFailingSinceMillis = null;
     private SortedMap<Long, Point> mOutbox = new TreeMap<>(new Comparator<Long>() {
         @Override public int compare(Long a, Long b) {  // sort in descending order
             return b > a ? 1 : b < a ? -1 : 0;
@@ -83,7 +92,7 @@ public class LocationService extends BaseService implements PointListener {
 
     @Override public void onCreate() {
         super.onCreate();
-        registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_FLEET_REPORTER_SMS_SENT));
+        registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
     }
 
     /** Starts running the service. */
@@ -97,30 +106,23 @@ public class LocationService extends BaseService implements PointListener {
             startForeground(NOTIFICATION_ID, buildNotification());
 
             // Activate the GPS receiver.
+            mNoGpsSinceTimeMillis = getGpsTimeMillis();
             mLocationAdapter = new LocationAdapter(new MotionListener(this));
             u.getLocationManager().requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
-
             u.getLocationManager().addNmeaListener(new NmeaMessageListener());
-            u.getLocationManager().addGpsStatusListener(new GpsStatusListener());
 
             // Start periodically recording and transmitting points.
             mHandler = new Handler();
             mRunnable = new Runnable() {
                 public void run() {
-                    // Sometimes the GPS provider stops calling onLocationChanged()
-                    // for a long time, if the device is stationary.  To ensure
-                    // that points keep getting recorded regularly, we need to
-                    // emit extra fixes to fill in these gaps.
-                    mLocationAdapter.ensureFixEmittedWithinLast(
-                        LOCATION_INTERVAL_MILLIS * 2);
                     checkWhetherToRecordPoint();
                     checkWhetherToTransmitMessages();
                     mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
                 }
             };
             mHandler.postDelayed(mRunnable, 0);
-            sendBroadcast(new Intent(ACTION_FLEET_REPORTER_SERVICE_CHANGED));
+            sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
         }
         return START_STICKY;
     }
@@ -132,23 +134,37 @@ public class LocationService extends BaseService implements PointListener {
         unregisterReceiver(mSmsStatusReceiver);
         if (mWakeLock != null) mWakeLock.release();
         isRunning = false;
-        sendBroadcast(new Intent(ACTION_FLEET_REPORTER_SERVICE_CHANGED));
+        sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
     }
 
-    class SmsStatusReceiver extends BroadcastReceiver {
-        @Override public void onReceive(Context context, Intent intent) {
-            if (getResultCode() == Activity.RESULT_OK &&
-                intent.hasExtra(EXTRA_SENT_KEYS)) {  // confirmation that SMS was sent
-                for (long key : intent.getLongArrayExtra(EXTRA_SENT_KEYS)) {
-                    Log.i(TAG, "sent " + key + "; removing from outbox");
-                    mNumSent += 1;
-                    mOutbox.remove(key);
-                }
-                u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
-            } else {
-                Log.i(TAG, "failed to send SMS message");
-            }
-        }
+    public Long getNoGpsSinceTimeMillis() {
+        return mNoGpsSinceTimeMillis;
+    }
+
+    public LocationFix getLastLocationFix() {
+        return mLastFix;
+    }
+
+    public boolean isResting() {
+        return mPoint != null && (
+            mPoint.type == Point.Type.STOP || mPoint.type == Point.Type.RESTING
+        );
+    }
+
+    public Long getMillisSinceLastTransition() {
+        return mPoint != null ? getGpsTimeMillis() - mPoint.lastTransitionMillis : null;
+    }
+
+    public double getMetersTravelledSinceStop() {
+        return mMetersTravelledSinceStop;
+    }
+
+    public Long getSmsFailingSinceMillis() {
+        return mSmsFailingSinceMillis;
+    }
+
+    public Long getLastSmsSentMillis() {
+        return mLastSmsSentMillis;
     }
 
     /** Creates the notification to show while the service is running. */
@@ -178,10 +194,42 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     /** Receives a new Point from the MotionListener. */
-    public void onPoint(Point point) {
-        Log.i(TAG, "onPoint: " + point);
-        mPoint = point;
-        checkWhetherToRecordPoint();
+    public void onPoint(Point point, boolean isProvisional) {
+        Log.i(TAG, "onPoint" + (isProvisional ? " (provisional): " : ": ") + point);
+
+        // Keep track of how long we haven't had a GPS fix.
+        if (point == null) {
+            if (mNoGpsSinceTimeMillis == null) {
+                mNoGpsSinceTimeMillis = mLastFix != null ? mLastFix.timeMillis : getGpsTimeMillis();
+            }
+            return;
+        }
+        mNoGpsSinceTimeMillis = null;
+        mLastFix = point.fix;
+
+        // Keep track of how far we've travelled.
+        if (point.type == Point.Type.GO || point.type == Point.Type.MOVING) {
+            if (mDistanceAnchor == null) {
+                mDistanceAnchor = point.fix;
+                mMetersTravelledSinceStop = 0;
+            } else {
+                double distance = mDistanceAnchor.distanceTo(point.fix);
+                if (distance > 2*point.fix.latLonSd && distance > 20) {  // meters
+                    mMetersTravelledSinceStop += distance;
+                    mDistanceAnchor = point.fix;
+                }
+            }
+        } else {
+            mDistanceAnchor = null;
+        }
+
+        // Record the point (but don't record provisional points).
+        if (!isProvisional) {
+            mPoint = point;
+            checkWhetherToRecordPoint();
+        }
+
+        sendBroadcast(new Intent(ACTION_POINT_RECEIVED));
     }
 
     /** Examines the last acquired point, and moves it to the outbox if necessary. */
@@ -215,14 +263,7 @@ public class LocationService extends BaseService implements PointListener {
         u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
 
         // Show the point in the app's text box.
-        postLogMessage("Recorded:\n    " + point.format());
-    }
-
-    private void postLogMessage(String message) {
-        Intent intent = new Intent(MainActivity.ACTION_FLEET_REPORTER_LOG_MESSAGE);
-        intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE,
-            Utils.formatUtcTimeSeconds(System.currentTimeMillis()) + " - " + message);
-        sendBroadcast(intent);
+        MainActivity.postLogMessage(this, "Recorded:\n    " + point.format());
     }
 
     /** Transmits points in the outbox, if it's not too soon to do so. */
@@ -246,10 +287,10 @@ public class LocationService extends BaseService implements PointListener {
         }
         Log.i(TAG, "transmitMessages: " + mOutbox.size() + " in queue; " +
                    "sending " + TextUtils.join(", ", sentKeys));
-        Intent intent = new Intent(ACTION_FLEET_REPORTER_SMS_SENT);
-        intent.putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys));
         Log.i(TAG, "SMS to " + destination + ": " + message);
-        u.sendSms(destination, message.trim(), intent);
+        u.sendSms(destination, message.trim(), new Intent(ACTION_SMS_SENT).putExtra(
+            EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys)
+        ));
     }
 
     /** Ensure the outbox contains no more than MAX_OUTBOX_SIZE entries. */
@@ -264,25 +305,33 @@ public class LocationService extends BaseService implements PointListener {
             System.currentTimeMillis() : mLocationAdapter.getGpsTimeMillis();
     }
 
-    class NmeaMessageListener implements GpsStatus.NmeaListener {
-        public void onNmeaReceived(long timestamp, String nmeaMessage) {
-            if (nmeaMessage.startsWith("$GLGSV")) return;
-            if (nmeaMessage.startsWith("$GPGSV")) return;
-            if (nmeaMessage.startsWith("$GPVTG")) return;
-            //postLogMessage("NMEA at " + Utils.formatUtcTimeSeconds(timestamp) + ":\n    " +
-            //    nmeaMessage);
+    class SmsStatusReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (getResultCode() == Activity.RESULT_OK &&
+                intent.hasExtra(EXTRA_SENT_KEYS)) {  // confirmation that SMS was sent
+                for (long key : intent.getLongArrayExtra(EXTRA_SENT_KEYS)) {
+                    Log.i(TAG, "sent " + key + "; removing from outbox");
+                    mNumSent += 1;
+                    mOutbox.remove(key);
+                    mLastSmsSentMillis = getGpsTimeMillis();
+                    mSmsFailingSinceMillis = null;
+                }
+                u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
+            } else {
+                if (mSmsFailingSinceMillis == null) {
+                    mSmsFailingSinceMillis = getGpsTimeMillis();
+                }
+                Log.i(TAG, "failed to send SMS message");
+            }
         }
     }
 
-    class GpsStatusListener implements GpsStatus.Listener {
-        public void onGpsStatusChanged(int event) {
-            switch (event) {
-                case GpsStatus.GPS_EVENT_SATELLITE_STATUS:
-                    // postLogMessage("GPS event: Satellite status");
-                    break;
-                case GpsStatus.GPS_EVENT_FIRST_FIX:
-                    // postLogMessage("GPS event: First fix");
-                    break;
+    class NmeaMessageListener implements GpsStatus.NmeaListener {
+        public void onNmeaReceived(long timestamp, String nmeaMessage) {
+            if (nmeaMessage.contains("GSA")) {
+                if (nmeaMessage.split(",")[2].equals("1")) {  // GPS signal lost
+                    mLocationAdapter.onGpsSignalLost();
+                }
             }
         }
     }

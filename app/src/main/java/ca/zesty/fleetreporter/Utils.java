@@ -112,17 +112,31 @@ public class Utils {
         return calendar.getTimeInMillis();
     }
 
+    /** Describes a time period using a short phrase like "23 min". */
+    public static String describePeriod(long elapsedMillis) {
+        long elapsedSec = elapsedMillis/1000;
+        if (elapsedSec < 60) return "just now";
+        if (elapsedSec < 3600) return format("%d min", elapsedSec/60);
+        if (elapsedSec < 36000)
+            return format("%.1f h", (float) elapsedSec/3600);
+        if (elapsedSec < 24*3600) return format("%d h", elapsedSec/3600);
+        if (elapsedSec < 7*24*3600)
+            return format("%.1f d", (float) elapsedSec/24/3600);
+        return format("%d d", elapsedSec/24/3600);
+    }
+
     /** Describes a time in the past using a short phrase like "15 h ago". */
     public static String describeTime(long timeMillis) {
-        long elapsedSec = (System.currentTimeMillis() - timeMillis)/1000;
-        if (elapsedSec < 60) return "just now";
-        if (elapsedSec < 3600) return format("%d m ago", elapsedSec/60);
-        if (elapsedSec < 36000)
-            return format("%.1f h ago", (float) elapsedSec/3600);
-        if (elapsedSec < 24*3600) return format("%d h ago", elapsedSec/3600);
-        if (elapsedSec < 7*24*3600)
-            return format("%.1f d ago", (float) elapsedSec/24/3600);
-        return format("%d d ago", elapsedSec/24/3600);
+        long elapsedMillis = System.currentTimeMillis() - timeMillis;
+        if (elapsedMillis < 60000) return "just now";
+        else return describePeriod(elapsedMillis) + " ago";
+    }
+
+    /** Describes a distance using a phrase like "150 m" or "7.3 km". */
+    public static String describeDistance(double meters) {
+        if (meters < 100) return format("%.0f m", meters);
+        if (meters < 10000) return format("%.1f km", 0.001 * meters);
+        return format("%.0f km", 0.001 * meters);
     }
 
     public static IntentFilter getMaxPrioritySmsFilter() {
@@ -254,7 +268,15 @@ public class Utils {
 
     public void setText(int id, String text) {
         if (activity == null) return;
-        ((TextView) activity.findViewById(id)).setText(text);
+        TextView view = activity.findViewById(id);
+        view.setText(text);
+    }
+
+    public void setText(int id, String text, int textColor) {
+        if (activity == null) return;
+        TextView view = activity.findViewById(id);
+        view.setText(text);
+        view.setTextColor(textColor);
     }
 
     public void setText(View view, int id, String text) {

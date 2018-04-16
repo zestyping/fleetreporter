@@ -1,11 +1,13 @@
 package ca.zesty.fleetreporter;
 
+import android.os.Parcel;
+import android.os.Parcelable;
+
 import java.util.Locale;
 
 /** A pure data class to take the place of android.location.Location, which
-    cannot be used in unit tests due to its unfortunate design.
- */
-public class LocationFix {
+    cannot be used in unit tests due to its unfortunate design. */
+public class LocationFix implements Parcelable {
     static final double EQUATOR_RADIUS = 6378137;  // meters from Earth center to equator
     static final double POLE_RADIUS = 6356752;  // meters from Earth center to pole
     static final double MEAN_RADIUS = (2 * EQUATOR_RADIUS + POLE_RADIUS)/3;
@@ -15,17 +17,17 @@ public class LocationFix {
     public final double latitude;  // degrees
     public final double longitude;  // degrees
     public final double altitude;  // meters
-    public final double speed;  // meters per second
+    public final double speedKmh;  // km/h
     public final double bearing;  // degrees
     public final double latLonSd;  // 68% confidence radius of lat/lon position, meters
 
     public LocationFix(long timeMillis, double latitude, double longitude,
-                       double altitude, double speed, double bearing, double latLonSd) {
+                       double altitude, double speedKmh, double bearing, double latLonSd) {
         this.timeMillis = timeMillis;
         this.latitude = latitude;
         this.longitude = longitude;
         this.altitude = altitude;
-        this.speed = speed;
+        this.speedKmh = speedKmh;
         this.bearing = bearing;
         this.latLonSd = latLonSd;
     }
@@ -37,7 +39,7 @@ public class LocationFix {
                 latitude == other.latitude &&
                 longitude == other.longitude &&
                 altitude == other.altitude &&
-                speed == other.speed &&
+                speedKmh == other.speedKmh &&
                 bearing == other.bearing &&
                 latLonSd == other.latLonSd;
         }
@@ -46,15 +48,15 @@ public class LocationFix {
 
     public String toString() {
         return String.format(
-            Locale.US, "%s: (%+.5f, %+.5f, %+.0f m), %.1f m/s brg %.0f, sd=%.0f m",
+            Locale.US, "%s: (%+.5f, %+.5f, %+.0f m), %.1f km/h brg %.0f, sd=%.0f m",
             Utils.formatUtcTimeMillis(timeMillis),
-            latitude, longitude, altitude, speed, bearing, latLonSd
+            latitude, longitude, altitude, speedKmh, bearing, latLonSd
         );
     }
 
     public LocationFix withTime(long timeMillis) {
         return new LocationFix(timeMillis, this.latitude, this.longitude,
-            this.altitude, this.speed, this.bearing, this.latLonSd);
+            this.altitude, this.speedKmh, this.bearing, this.latLonSd);
     }
 
     private double hav(double theta) {
@@ -74,5 +76,37 @@ public class LocationFix {
         ));
 
         return MEAN_RADIUS * angularDistance;
+    }
+
+    public static Parcelable.Creator CREATOR = new Parcelable.Creator<LocationFix>() {
+        public LocationFix createFromParcel(Parcel parcel) {
+            return new LocationFix(
+                parcel.readLong(),
+                parcel.readDouble(),
+                parcel.readDouble(),
+                parcel.readDouble(),
+                parcel.readDouble(),
+                parcel.readDouble(),
+                parcel.readDouble()
+            );
+        }
+
+        public LocationFix[] newArray(int n) {
+            return new LocationFix[n];
+        }
+    };
+
+    public int describeContents() {
+        return 0;
+    }
+
+    public void writeToParcel(Parcel out, int flags) {
+        out.writeLong(timeMillis);
+        out.writeDouble(latitude);
+        out.writeDouble(longitude);
+        out.writeDouble(altitude);
+        out.writeDouble(speedKmh);
+        out.writeDouble(bearing);
+        out.writeDouble(latLonSd);
     }
 }

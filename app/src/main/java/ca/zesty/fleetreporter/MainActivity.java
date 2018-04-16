@@ -2,10 +2,15 @@ package ca.zesty.fleetreporter;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.os.BatteryManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
 import android.support.v4.app.ActivityCompat;
 import android.telephony.SmsMessage;
 import android.view.Menu;
@@ -19,13 +24,19 @@ import java.util.regex.Pattern;
 public class MainActivity extends BaseActivity {
     static final String TAG = "MainActivity";
     static final String ACTION_SMS_RECEIVED = "android.provider.Telephony.SMS_RECEIVED";
-    public static final String ACTION_FLEET_REPORTER_LOG_MESSAGE = "FLEET_REPORTER_LOG_MESSAGE";
+    static final long DISPLAY_INTERVAL_MILLIS = 5 * 1000;
+    public static final String ACTION_LOG_MESSAGE = "FLEET_REPORTER_LOG_MESSAGE";
     public static final String EXTRA_LOG_MESSAGE = "LOG_MESSAGE";
 
+    private ServiceConnection mServiceConnection = new LocationServiceConnection();
+    private LocationService mLocationService = null;
+    private PointReceiver mPointReceiver = new PointReceiver();
     private LogMessageReceiver mLogMessageReceiver = new LogMessageReceiver();
     private ServiceChangedReceiver mServiceChangedReceiver = new ServiceChangedReceiver();
-    private SmsAssignReceiver mSmsAssignReceiver = new SmsAssignReceiver();
+    private SmsReceiver mSmsReceiver = new SmsReceiver();
     private String mLastDestinationNumber = "";
+    private Handler mHandler = null;
+    private Runnable mRunnable = null;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,19 +65,42 @@ public class MainActivity extends BaseActivity {
         findViewById(R.id.unpause_button).setOnClickListener(
             new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    startService(new Intent(u.context, LocationService.class));
+                    startLocationService();
                 }
             }
         );
 
-        registerReceiver(mLogMessageReceiver, new IntentFilter(ACTION_FLEET_REPORTER_LOG_MESSAGE));
-        registerReceiver(mServiceChangedReceiver, new IntentFilter(LocationService.ACTION_FLEET_REPORTER_SERVICE_CHANGED));
-        registerReceiver(mSmsAssignReceiver, new IntentFilter(ACTION_SMS_RECEIVED));
+        bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
+
+        registerReceiver(mLogMessageReceiver, new IntentFilter(ACTION_LOG_MESSAGE));
+        registerReceiver(mPointReceiver, new IntentFilter(LocationService.ACTION_POINT_RECEIVED));
+        registerReceiver(mServiceChangedReceiver, new IntentFilter(LocationService.ACTION_SERVICE_CHANGED));
+        registerReceiver(mSmsReceiver, new IntentFilter(ACTION_SMS_RECEIVED));
         updateUiMode();
+
+        // Some elements of the display show elapsed time, so we need to
+        // periodically update the display even if there are no new events.
+        mHandler = new Handler();
+        mRunnable = new Runnable() {
+            public void run() {
+                updateReportingFrame();
+                mHandler.postDelayed(mRunnable, DISPLAY_INTERVAL_MILLIS);
+            }
+        };
+        mHandler.postDelayed(mRunnable, 0);
     }
 
     @Override protected void onDestroy() {
+        try {
+            unbindService(mServiceConnection);
+        } catch (IllegalArgumentException e) {
+            // Ignore the error we get when there was nothing to unbind.
+        }
+        mHandler.removeCallbacks(mRunnable);
         unregisterReceiver(mLogMessageReceiver);
+        unregisterReceiver(mPointReceiver);
+        unregisterReceiver(mServiceChangedReceiver);
+        unregisterReceiver(mSmsReceiver);
         super.onDestroy();
     }
 
@@ -80,7 +114,7 @@ public class MainActivity extends BaseActivity {
             registerReporter();
         }
         if (item.getItemId() == R.id.action_pause) {
-            stopService(new Intent(this, LocationService.class));
+            stopLocationService();
         }
         if (item.getItemId() == R.id.action_settings) {
             startActivity(new Intent(this, SettingsActivity.class));
@@ -117,6 +151,57 @@ public class MainActivity extends BaseActivity {
         }
     }
 
+    private void updateReportingFrame() {
+        LocationService s = mLocationService;  // mLocationService field is volatile, save it
+        if (s == null) return;
+        Long noGpsMillis = s.getNoGpsSinceTimeMillis();
+        LocationFix fix = s.getLastLocationFix();
+        Long segmentMillis = s.getMillisSinceLastTransition();
+        if (noGpsMillis != null || fix == null) {
+            u.setText(R.id.speed, "no GPS", 0xffe04020);
+            u.setText(R.id.speed_details, noGpsMillis == null ? "" : "no signal since\n" + Utils.describeTime(noGpsMillis));
+        } else {
+            double displaySpeed = s.isResting() ? 0 : fix.speedKmh;
+            u.setText(R.id.speed, Utils.format("%.0f km/h", displaySpeed), 0xff00a020);
+            if (segmentMillis != null && segmentMillis >= 60 * 1000) {
+                String segmentPeriod = Utils.describePeriod(segmentMillis);
+                String distance = Utils.describeDistance(s.getMetersTravelledSinceStop());
+                u.setText(R.id.speed_details, s.isResting() ?
+                    "stopped here for\n" + segmentPeriod :
+                    distance + " in " + segmentPeriod + "\nsince last stop"
+                );
+            } else {
+                u.setText(R.id.speed_details, "");
+            }
+        }
+
+        Long smsFailMillis = s.getSmsFailingSinceMillis();
+        Long smsSentMillis = s.getLastSmsSentMillis();
+        if (smsFailMillis != null) {
+            u.setText(R.id.sms, "no SMS", 0xffe04020);
+            u.setText(R.id.sms_details,
+                smsSentMillis != null ?
+                "sent last report\n" + Utils.describeTime(smsSentMillis) :
+                "unable to send since\n" + Utils.describeTime(smsFailMillis));
+        } else if (smsSentMillis != null) {
+            u.setText(R.id.sms, "\u2714", 0xff00a020);
+            u.setText(R.id.sms_details, "sent last report\n" + Utils.describeTime(smsSentMillis));
+        } else {
+            u.setText(R.id.sms, "no SMS", 0xff808080);
+            u.setText(R.id.sms_details, "nothing sent yet\n");
+        }
+
+        Intent status = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        try {
+            int level = status.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = status.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            int percent = 100 * level / scale;
+            u.setText(R.id.battery, percent + "% battery", percent < 20 ? 0xffe04020 : percent < 80 ? 0xffc08030 : 0xff00a020);
+        } catch (NullPointerException e) {
+            u.setText(R.id.battery, "battery state unknown", 0xffe04020);
+        }
+    }
+
     private void registerReporter() {
         String destinationNumber = u.getPref(Prefs.DESTINATION_NUMBER).trim();
         if (destinationNumber.isEmpty()) destinationNumber = mLastDestinationNumber;
@@ -135,23 +220,52 @@ public class MainActivity extends BaseActivity {
         );
     }
 
+    private void startLocationService() {
+        startService(new Intent(this, LocationService.class));
+    }
+
+    private void stopLocationService() {
+        stopService(new Intent(this, LocationService.class));
+    }
+
+    /** Defines callbacks for service binding, passed to bindService() */
+    class LocationServiceConnection implements ServiceConnection {
+        @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+            mLocationService = (LocationService) ((BaseService.LocalBinder) binder).getService();
+        }
+
+        @Override public void onServiceDisconnected(ComponentName name) {
+            mLocationService = null;
+        }
+    };
+
+    public static void postLogMessage(Context context, String message) {
+        context.sendBroadcast(new Intent(ACTION_LOG_MESSAGE).putExtra(EXTRA_LOG_MESSAGE,
+            Utils.formatUtcTimeSeconds(System.currentTimeMillis()) + " - " + message
+        ));
+    }
+
     class LogMessageReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            if (intent.hasExtra(EXTRA_LOG_MESSAGE)) {
-                String message = intent.getStringExtra(EXTRA_LOG_MESSAGE);
-                ((TextView) findViewById(R.id.message_log)).append(message + "\n");
-            }
+            String message = intent.getStringExtra(EXTRA_LOG_MESSAGE);
+            ((TextView) findViewById(R.id.message_log)).append(message + "\n");
+        }
+    }
+
+    class PointReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            updateReportingFrame();
         }
     }
 
     class ServiceChangedReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
             updateUiMode();
+            updateReportingFrame();
         }
     }
 
-    /** Handles incoming SMS messages for reported locations. */
-    class SmsAssignReceiver extends BroadcastReceiver {
+    class SmsReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
             final Pattern PATTERN_ASSIGN = Pattern.compile(
                 "^fleet assign ([0-9a-zA-Z]+) +(.*)");
@@ -174,7 +288,7 @@ public class MainActivity extends BaseActivity {
             u.setPref(Prefs.REPORTER_ID, reporterId);
             u.setPref(Prefs.REPORTER_LABEL, label);
             u.sendSms(receiverNumber, "fleet activate " + reporterId);
-            startService(new Intent(u.context, LocationService.class));
+            startLocationService();
         }
     }
 }

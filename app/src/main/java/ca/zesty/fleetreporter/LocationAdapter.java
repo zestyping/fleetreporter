@@ -12,7 +12,6 @@ import android.os.Bundle;
 public class LocationAdapter implements LocationListener {
     private final LocationFixListener mTarget;
     private LocationFix mLastFix = null;
-    private long mLastFixEmittedMillis = 0;
     private long mGpsTimeOffsetMillis = 0;
 
     public LocationAdapter(LocationFixListener target) {
@@ -25,41 +24,25 @@ public class LocationAdapter implements LocationListener {
         // and this allows us to use estimated GPS time for all stored times and
         // for scheduling all timed actions (see all uses of getGpsTimeMillis()).
         mGpsTimeOffsetMillis = location.getTime() - System.currentTimeMillis();
-        mLastFix = new LocationFix(
+        mTarget.onLocationFix(new LocationFix(
             location.getTime(),
             location.getLatitude(), location.getLongitude(), location.getAltitude(),
             location.getSpeed(), location.getBearing(), location.getAccuracy()
-        );
-        mTarget.onLocationFix(mLastFix);
-        mLastFixEmittedMillis = mLastFix.timeMillis;
+        ));
     }
 
     @Override public void onStatusChanged(String provider, int status, Bundle extras) {
-        if (status != LocationProvider.AVAILABLE) invalidateLastFix();
+        if (status != LocationProvider.AVAILABLE) onGpsSignalLost();
     }
 
     @Override public void onProviderEnabled(String provider) { }
 
     @Override public void onProviderDisabled(String provider) {
-        invalidateLastFix();
+        onGpsSignalLost();
     }
 
-    /** Sends a fix to the target listener now if there hasn't been one sent
-     in the last durationMillis milliseconds. */
-    public void ensureFixEmittedWithinLast(long durationMillis) {
-        long nowMillis = getGpsTimeMillis();
-        if (nowMillis >= mLastFixEmittedMillis + durationMillis) {
-            mTarget.onLocationFix(mLastFix == null ? null : mLastFix.withTime(nowMillis));
-            mLastFixEmittedMillis = nowMillis;
-        }
-    }
-
-    private void invalidateLastFix() {
-        if (mLastFix != null) {
-            mLastFix = null;
-            mTarget.onLocationFix(null);
-            mLastFixEmittedMillis = getGpsTimeMillis();
-        }
+    public void onGpsSignalLost() {
+        mTarget.onLocationFix(null);
     }
 
     public long getGpsTimeMillis() {

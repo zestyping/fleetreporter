@@ -1,5 +1,8 @@
 package ca.zesty.fleetreporter;
 
+import android.os.Parcel;
+import android.os.Parcelable;
+
 import java.util.Locale;
 
 /** A data class for reporting location information about a tracked entity.
@@ -25,7 +28,7 @@ import java.util.Locale;
       - A resting point overrides any points previously received by the server
         that have timestamps between lastTransitionMillis and timeMillis.
  */
-public class Point {
+public class Point implements Parcelable {
     public final LocationFix fix;
     enum Type { RESTING, MOVING, GO, STOP };
     public final Type type;
@@ -54,8 +57,11 @@ public class Point {
         return fix.timeMillis / 1000;
     }
 
+    public long getSegmentMillis() {
+        return fix.timeMillis - lastTransitionMillis;
+    }
     public long getSegmentSeconds() {
-        return (fix.timeMillis - lastTransitionMillis) / 1000;
+        return getSegmentMillis() / 1000;
     }
 
     /** Formats a point for readability and debugging. */
@@ -74,11 +80,35 @@ public class Point {
             Utils.clamp(-90, 90, fix.latitude),  // degrees, 9 chars
             Utils.clamp(-180, 180, fix.longitude),  // degrees, 10 chars
             Utils.clamp(-9999, 9999, Math.round(fix.altitude)),  // meters, 5 chars
-            Utils.clamp(0, 999, Math.round(fix.speed * 3.6)),  // km/h, 3 chars
+            Utils.clamp(0, 999, Math.round(fix.speedKmh)),  // km/h, 3 chars
             Utils.clamp(0, 360, Math.round(fix.bearing)) % 360,  // degrees, 3 chars
             Utils.clamp(0, 9999, Math.round(fix.latLonSd)),  // meters, 4 chars
             Utils.clamp(0, 99999, getSegmentSeconds()),  // seconds, 5 chars
             type.name().substring(0, 1).toLowerCase()  // 1 char
         );  // length <= 20 + 9 + 10 + 5 + 3 + 3 + 4 + 5 + 1 + 7 separators = 67
+    }
+
+    public static Parcelable.Creator CREATOR = new Parcelable.Creator<Point>() {
+        public Point createFromParcel(Parcel parcel) {
+            return new Point(
+                (LocationFix) parcel.readParcelable(LocationFix.class.getClassLoader()),
+                Type.valueOf(parcel.readString()),
+                parcel.readLong()
+            );
+        }
+
+        public Point[] newArray(int n) {
+            return new Point[n];
+        }
+    };
+
+    public int describeContents() {
+        return 0;
+    }
+
+    public void writeToParcel(Parcel out, int flags) {
+        out.writeParcelable(fix, 0);
+        out.writeString(type.name());
+        out.writeLong(lastTransitionMillis);
     }
 }
