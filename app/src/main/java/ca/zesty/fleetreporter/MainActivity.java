@@ -196,9 +196,12 @@ public class MainActivity extends BaseActivity {
             int level = status.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
             int scale = status.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
             int percent = 100 * level / scale;
-            u.setText(R.id.battery, percent + "% battery", percent < 20 ? 0xffe04020 : percent < 80 ? 0xffc08030 : 0xff00a020);
+            boolean isPlugged = status.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) != 0;
+            u.setText(R.id.battery, percent + "% battery", isPlugged ? 0xff00a020 : 0xffe04020);
+            u.setText(R.id.battery_details, isPlugged ? "power is connected" : "no power source ");
         } catch (NullPointerException e) {
             u.setText(R.id.battery, "battery state unknown", 0xffe04020);
+            u.setText(R.id.battery_details, "");
         }
     }
 

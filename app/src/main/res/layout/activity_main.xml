@@ -70,9 +70,11 @@
 
     <TableLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:layout_marginBottom="32dp">
 
-      <TableRow android:layout_marginTop="32dp">
+      <TableRow>
         <TextView
             android:id="@+id/speed"
             android:layout_width="0dp"
@@ -118,10 +120,19 @@
           android:layout_height="wrap_content"
           android:layout_weight="1"
           android:layout_marginTop="32dp"
-          android:layout_marginBottom="32dp"
           android:textAlignment="center"
           tools:text="100% battery"
           android:textSize="32sp" />
+
+      <TextView
+          android:id="@+id/battery_details"
+          android:layout_width="0dp"
+          android:layout_height="wrap_content"
+          android:layout_weight="1"
+          android:textAlignment="center"
+          tools:text="not charging"
+          android:textSize="16sp" />
+
     </TableLayout>
 
     <TextView
