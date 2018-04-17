@@ -2,12 +2,6 @@
 <PreferenceScreen
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:title="Settings">
-  <EditTextPreference
-      android:key="pref_destination_number"
-      android:title="Destination number"
-      android:summary="Mobile number where SMS location reports will be sent"
-      android:hint="A mobile number starting with +"
-      android:defaultValue="" />
 
   <EditTextPreference
       android:key="pref_recording_interval"
@@ -19,10 +13,41 @@
 
   <EditTextPreference
       android:key="pref_recording_interval_after_go"
-      android:title="Recording interval after starting to move"
+      android:title="Recording interval upon starting to move"
       android:summary="Number of minutes after departing from a stop to record an extra point"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="1" />
+
+  <EditTextPreference
+      android:key="pref_settling_period"
+      android:title="Settling period"
+      android:summary="Number of minutes of not moving to interpret as a stop"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="2" />
+
+  <PreferenceScreen
+    android:title="Developer settings">
+
+    <EditTextPreference
+        android:key="pref_destination_number"
+        android:title="Destination number"
+        android:summary="Do not edit (debugging only)"
+        android:defaultValue="" />
+
+    <EditTextPreference
+        android:key="pref_reporter_label"
+        android:title="Reporter label"
+        android:summary="Do not edit (debugging only)"
+        android:defaultValue="" />
+
+    <EditTextPreference
+        android:key="pref_reporter_id"
+        android:title="Reporter ID"
+        android:summary="Do not edit (debugging only)"
+        android:defaultValue="" />
+
+  </PreferenceScreen>
 
 </PreferenceScreen>

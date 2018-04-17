@@ -162,8 +162,7 @@ public class MainActivity extends BaseActivity {
             u.setText(R.id.speed, "no GPS", 0xffe04020);
             u.setText(R.id.speed_details, noGpsMillis == null ? "" : "no signal since\n" + Utils.describeTime(noGpsMillis));
         } else {
-            double displaySpeed = s.isResting() ? 0 : fix.speedKmh;
-            u.setText(R.id.speed, Utils.format("%.0f km/h", displaySpeed), 0xff00a020);
+            u.setText(R.id.speed, Utils.format("%.0f km/h", fix.speedKmh), 0xff00a020);
             if (segmentMillis != null && segmentMillis >= 60 * 1000) {
                 String segmentPeriod = Utils.describePeriod(segmentMillis);
                 u.setText(R.id.speed_details, s.isResting() ?
@@ -172,7 +171,7 @@ public class MainActivity extends BaseActivity {
                 );
             } else {
                 u.setText(R.id.speed_details, s.isResting() ?
-                    "stopped" : distance + "\nsince last stop");
+                    "stopped" : "travelled " + distance + "\nsince last stop");
             }
         }
 

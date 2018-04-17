@@ -17,16 +17,16 @@ public class MotionListener implements LocationFixListener {
     // enough to zero (< STABLE_MAX_SPEED).
     //
     // The MotionListener enters the "resting" state if all the location fixes
-    // during a "settling period" (SETTLING_PERIOD_MILLIS) have been stable and
-    // close together (within RESTING_RADIUS of a selected anchor location).
+    // during a "settling period" have been stable and close together (within
+    // RESTING_RADIUS of a selected anchor location).
 
     static final double STABLE_MAX_ACCURACY = 50.0;  // meters
     static final double STABLE_MAX_SPEED = 5.0;  // km/h
-    static final long SETTLING_PERIOD_MILLIS = 60 * 1000;  // one minute
     static final double RESTING_RADIUS = 20.0;  // meters
     static final double GOOD_ENOUGH_ANCHOR_ACCURACY = 10.0;  // meters
 
     private final PointListener mTarget;
+    private final Getter<Long> mGetSettlingPeriodMillis;
     private boolean isResting = false;  // current state, either "resting" or "moving"
     private Long mLastTransitionMillis = null;  // time of last state transition
 
@@ -35,8 +35,9 @@ public class MotionListener implements LocationFixListener {
     private LocationFix mLastRestingFix = null;  // last fix that was in resting state
 
     /** Creates a MotionListener that sends Points to a PointListener. */
-    public MotionListener(PointListener target) {
+    public MotionListener(PointListener target, Getter<Long> getSettlingPeriodMillis) {
         mTarget = target;
+        mGetSettlingPeriodMillis = getSettlingPeriodMillis;
     }
 
     @Override public void onLocationFix(LocationFix fix) {
@@ -77,7 +78,7 @@ public class MotionListener implements LocationFixListener {
 
         // Decide if we need to transition to resting or moving.
         boolean nextResting = mAnchor != null &&
-            fix.timeMillis - mSettlingStartMillis >= SETTLING_PERIOD_MILLIS;
+            fix.timeMillis - mSettlingStartMillis >= mGetSettlingPeriodMillis.get();
 
         if (!isResting && nextResting) {
             // The resting segment actually started a little bit in the past,

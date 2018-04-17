@@ -59,6 +59,7 @@ public class LocationService extends BaseService implements PointListener {
     static final long LOCATION_INTERVAL_MILLIS = 1000;
     static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
+    static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * 60 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
     static final String ACTION_POINT_RECEIVED = "FLEET_REPORTER_POINT_RECEIVED";
@@ -107,7 +108,7 @@ public class LocationService extends BaseService implements PointListener {
 
             // Activate the GPS receiver.
             mNoGpsSinceTimeMillis = getGpsTimeMillis();
-            mLocationAdapter = new LocationAdapter(new MotionListener(this));
+            mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
             u.getLocationManager().requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
             u.getLocationManager().addNmeaListener(new NmeaMessageListener());
@@ -129,7 +130,7 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Cleans up when the service is about to stop. */
     @Override public void onDestroy() {
-        mHandler.removeCallbacks(mRunnable);
+        if (mHandler != null) mHandler.removeCallbacks(mRunnable);
         u.getLocationManager().removeUpdates(mLocationAdapter);
         unregisterReceiver(mSmsStatusReceiver);
         if (mWakeLock != null) mWakeLock.release();
@@ -336,6 +337,18 @@ public class LocationService extends BaseService implements PointListener {
                     mLocationAdapter.onGpsSignalLost();
                 }
             }
+        }
+    }
+
+    class SettlingPeriodGetter implements Getter<Long> {
+        public Long get() {
+            double minutes;
+            try {
+                minutes = Double.parseDouble(u.getPref(Prefs.SETTLING_PERIOD));
+            } catch (NumberFormatException e) {
+                return DEFAULT_SETTLING_PERIOD_MILLIS;
+            }
+            return Math.round(minutes * 60 * 1000);
         }
     }
 }
