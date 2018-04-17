@@ -19,11 +19,11 @@ ext {
     // after "." are special to the shell except ":", "=", "@", "^", "_", "~",
     // which are mysterious or hard to pronounce.  So let's use "d" and "p".
     getGitVersionDescription = { ->
-        getCommandOutput('git', 'describe', '--tags', '--dirty=@')
+        getCommandOutput('git', 'describe', '--tags', '--dirty=+')
                 .replaceAll('^v', '')
-                .replaceAll('-g([0-9a-f]+)(@?)', '$2 ($1$2)')
-                .replaceAll('@', 'd')
-                .replaceAll('-', 'p')
+                .replaceAll('-g([0-9a-f]+)(\\+?)', '$2 ($1$2)')
+                .replace('+ ', 'd ')
+                .replace('-', 'p')
     }
 }
 
