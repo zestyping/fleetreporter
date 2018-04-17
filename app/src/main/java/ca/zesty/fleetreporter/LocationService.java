@@ -73,6 +73,7 @@ public class LocationService extends BaseService implements PointListener {
     private PowerManager.WakeLock mWakeLock = null;
 
     private LocationAdapter mLocationAdapter = null;
+    private NmeaListener mNmeaListener = null;
     private Point mPoint = null;  // non-provisional, null means no GPS
     private LocationFix mLastFix = null;  // possibly provisional, never null after first assigned
     private LocationFix mDistanceAnchor = null;
@@ -93,7 +94,19 @@ public class LocationService extends BaseService implements PointListener {
 
     @Override public void onCreate() {
         super.onCreate();
+        mHandler = new Handler();
+        mRunnable = new Runnable() {
+            public void run() {
+                checkWhetherToRecordPoint();
+                checkWhetherToTransmitMessages();
+                mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
+            }
+        };
         registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
+        mWakeLock = u.getPowerManager().newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
+        mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
+        mNmeaListener = new NmeaListener();
     }
 
     /** Starts running the service. */
@@ -101,27 +114,16 @@ public class LocationService extends BaseService implements PointListener {
         if (!isRunning) {
             // Grab the CPU.
             isRunning = true;
-            mWakeLock = u.getPowerManager().newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
             mWakeLock.acquire();
             startForeground(NOTIFICATION_ID, buildNotification());
 
             // Activate the GPS receiver.
             mNoGpsSinceTimeMillis = getGpsTimeMillis();
-            mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
             u.getLocationManager().requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
-            u.getLocationManager().addNmeaListener(new NmeaMessageListener());
+            u.getLocationManager().addNmeaListener(new NmeaListener());
 
             // Start periodically recording and transmitting points.
-            mHandler = new Handler();
-            mRunnable = new Runnable() {
-                public void run() {
-                    checkWhetherToRecordPoint();
-                    checkWhetherToTransmitMessages();
-                    mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
-                }
-            };
             mHandler.postDelayed(mRunnable, 0);
             sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
         }
@@ -130,11 +132,12 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Cleans up when the service is about to stop. */
     @Override public void onDestroy() {
-        if (mHandler != null) mHandler.removeCallbacks(mRunnable);
+        mHandler.removeCallbacks(mRunnable);
         u.getLocationManager().removeUpdates(mLocationAdapter);
-        unregisterReceiver(mSmsStatusReceiver);
-        if (mWakeLock != null) mWakeLock.release();
+        u.getLocationManager().removeNmeaListener(mNmeaListener);
+        if (mWakeLock.isHeld()) mWakeLock.release();
         isRunning = false;
+        unregisterReceiver(mSmsStatusReceiver);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
     }
 
@@ -330,7 +333,7 @@ public class LocationService extends BaseService implements PointListener {
         }
     }
 
-    class NmeaMessageListener implements GpsStatus.NmeaListener {
+    class NmeaListener implements GpsStatus.NmeaListener {
         public void onNmeaReceived(long timestamp, String nmeaMessage) {
             if (nmeaMessage.contains("GSA")) {
                 if (nmeaMessage.split(",")[2].equals("1")) {  // GPS signal lost

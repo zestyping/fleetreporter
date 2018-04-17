@@ -76,18 +76,27 @@ public class MainActivity extends BaseActivity {
         registerReceiver(mPointReceiver, new IntentFilter(LocationService.ACTION_POINT_RECEIVED));
         registerReceiver(mServiceChangedReceiver, new IntentFilter(LocationService.ACTION_SERVICE_CHANGED));
         registerReceiver(mSmsReceiver, new IntentFilter(ACTION_SMS_RECEIVED));
-        updateUiMode();
 
         // Some elements of the display show elapsed time, so we need to
         // periodically update the display even if there are no new events.
         mHandler = new Handler();
         mRunnable = new Runnable() {
             public void run() {
+                updateUiMode();
                 updateReportingFrame();
                 mHandler.postDelayed(mRunnable, DISPLAY_INTERVAL_MILLIS);
             }
         };
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
         mHandler.postDelayed(mRunnable, 0);
+    }
+
+    @Override protected void onPause() {
+        mHandler.removeCallbacks(mRunnable);
+        super.onPause();
     }
 
     @Override protected void onDestroy() {
@@ -96,7 +105,6 @@ public class MainActivity extends BaseActivity {
         } catch (IllegalArgumentException e) {
             // Ignore the error we get when there was nothing to unbind.
         }
-        mHandler.removeCallbacks(mRunnable);
         unregisterReceiver(mLogMessageReceiver);
         unregisterReceiver(mPointReceiver);
         unregisterReceiver(mServiceChangedReceiver);
@@ -130,37 +138,35 @@ public class MainActivity extends BaseActivity {
 
     private void updateUiMode() {
         if (isRegistered()) {
+            u.setText(R.id.reporter_label, u.getPref(Prefs.REPORTER_LABEL));
             if (LocationService.isRunning) {
                 u.setText(R.id.mode_label, "Reporting as:");
-                u.show(R.id.reporting_frame);
-                u.hide(R.id.unpause_button);
+                u.showFrameChild(R.id.reporting_frame);
             } else {
                 u.setText(R.id.mode_label, "Reporting is paused!");
-                u.hide(R.id.reporting_frame);
-                u.show(R.id.unpause_button);
+                u.showFrameChild(R.id.unpause_button);
             }
-            u.show(R.id.reporter_label);
-            u.setText(R.id.reporter_label, u.getPref(Prefs.REPORTER_LABEL));
-            u.hide(R.id.register_button);
         } else {
             u.setText(R.id.mode_label, "Not yet registered");
             u.hide(R.id.reporter_label);
-            u.show(R.id.register_button);
-            u.hide(R.id.reporting_frame);
-            u.hide(R.id.unpause_button);
+            u.showFrameChild(R.id.register_button);
         }
     }
 
     private void updateReportingFrame() {
         LocationService s = mLocationService;  // mLocationService field is volatile, save it
         if (s == null) return;
+
+        // Note all TextViews are initialized in activity_main.xml and set here to
+        // have a constant number of lines of text, so that their height stays fixed.
+
         Long noGpsMillis = s.getNoGpsSinceTimeMillis();
         LocationFix fix = s.getLastLocationFix();
         Long segmentMillis = s.getMillisSinceLastTransition();
         String distance = Utils.describeDistance(s.getMetersTravelledSinceStop());
         if (noGpsMillis != null || fix == null) {
             u.setText(R.id.speed, "no GPS", 0xffe04020);
-            u.setText(R.id.speed_details, noGpsMillis == null ? "" : "no signal since\n" + Utils.describeTime(noGpsMillis));
+            u.setText(R.id.speed_details, noGpsMillis == null ? "\n" : "no signal since\n" + Utils.describeTime(noGpsMillis));
         } else {
             u.setText(R.id.speed, Utils.format("%.0f km/h", fix.speedKmh), 0xff00a020);
             if (segmentMillis != null && segmentMillis >= 60 * 1000) {
@@ -171,7 +177,7 @@ public class MainActivity extends BaseActivity {
                 );
             } else {
                 u.setText(R.id.speed_details, s.isResting() ?
-                    "stopped" : "travelled " + distance + "\nsince last stop");
+                    "stopped\n" : "travelled " + distance + "\nsince last stop");
             }
         }
 
@@ -201,7 +207,7 @@ public class MainActivity extends BaseActivity {
             u.setText(R.id.battery_details, isPlugged ? "power is connected" : "no power source ");
         } catch (NullPointerException e) {
             u.setText(R.id.battery, "battery state unknown", 0xffe04020);
-            u.setText(R.id.battery_details, "");
+            u.setText(R.id.battery_details, "x");
         }
     }
 

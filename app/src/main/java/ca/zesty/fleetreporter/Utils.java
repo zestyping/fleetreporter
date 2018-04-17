@@ -115,7 +115,6 @@ public class Utils {
     /** Describes a time period using a short phrase like "23 min". */
     public static String describePeriod(long elapsedMillis) {
         long elapsedSec = elapsedMillis/1000;
-        if (elapsedSec < 60) return "just now";
         if (elapsedSec < 3600) return format("%d min", elapsedSec/60);
         if (elapsedSec < 36000)
             return format("%.1f h", (float) elapsedSec/3600);
@@ -270,6 +269,7 @@ public class Utils {
         if (activity == null) return;
         TextView view = activity.findViewById(id);
         view.setText(text);
+        view.setVisibility(View.VISIBLE);
     }
 
     public void setText(int id, String text, int textColor) {
@@ -277,10 +277,20 @@ public class Utils {
         TextView view = activity.findViewById(id);
         view.setText(text);
         view.setTextColor(textColor);
+        view.setVisibility(View.VISIBLE);
     }
 
     public void setText(View view, int id, String text) {
-        ((TextView) view.findViewById(id)).setText(text);
+        TextView child = ((TextView) view.findViewById(id));
+        child.setText(text);
+        child.setVisibility(View.VISIBLE);
+    }
+
+    public void setText(View view, int id, String text, int textColor) {
+        TextView child = ((TextView) view.findViewById(id));
+        child.setText(text);
+        child.setTextColor(textColor);
+        child.setVisibility(View.VISIBLE);
     }
 
     /** Shows a simple message box with an OK button. */
@@ -322,5 +332,14 @@ public class Utils {
             WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
         dialog.show();
         inputView.setSelection(inputView.length());  // put cursor at end
+    }
+
+    public void showFrameChild(int id) {
+        View selected = activity.findViewById(id);
+        ViewGroup group = (ViewGroup) selected.getParent();
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            child.setVisibility(child == selected ? View.VISIBLE : View.INVISIBLE);
+        }
     }
 }
