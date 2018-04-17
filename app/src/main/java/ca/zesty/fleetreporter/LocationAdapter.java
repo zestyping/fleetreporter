@@ -24,10 +24,11 @@ public class LocationAdapter implements LocationListener {
         // and this allows us to use estimated GPS time for all stored times and
         // for scheduling all timed actions (see all uses of getGpsTimeMillis()).
         mGpsTimeOffsetMillis = location.getTime() - System.currentTimeMillis();
+        double speedKmh = location.getSpeed() * 3.6;  // 1 m/s = 3.6 km/h
         mTarget.onLocationFix(new LocationFix(
             location.getTime(),
             location.getLatitude(), location.getLongitude(), location.getAltitude(),
-            location.getSpeed(), location.getBearing(), location.getAccuracy()
+            speedKmh, location.getBearing(), location.getAccuracy()
         ));
     }
 

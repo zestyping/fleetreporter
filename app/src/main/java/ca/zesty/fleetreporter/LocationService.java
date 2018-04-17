@@ -180,10 +180,12 @@ public class LocationService extends BaseService implements PointListener {
         long minutes = Math.max(0, (long) Math.ceil(
             (mNextRecordMillis - getGpsTimeMillis()) / 60000));
         String message = (
-            mNumRecorded + " " + Utils.plural(mNumRecorded, "point", "points") +
-            " recorded; next in " + minutes + " minute" + Utils.plural(minutes) +
-            "; " + mNumSent + " sent; " + mOutbox.size() + " queued."
-        );
+            (mNoGpsSinceTimeMillis != null ? "GPS signal lost.  " : "") +
+            (mSmsFailingSinceMillis != null ? "Unable to send SMS.  " : "")
+        ).trim();
+        if (message.isEmpty()) message = "Reporting your location.  ";
+        if (mLastSmsSentMillis != null) message += Utils.format(
+            "Last SMS sent " + Utils.describeTime(mLastSmsSentMillis));
 
         return new NotificationCompat.Builder(this)
             .setContentTitle("Fleet Reporter")
@@ -200,7 +202,8 @@ public class LocationService extends BaseService implements PointListener {
         // Keep track of how long we haven't had a GPS fix.
         if (point == null) {
             if (mNoGpsSinceTimeMillis == null) {
-                mNoGpsSinceTimeMillis = mLastFix != null ? mLastFix.timeMillis : getGpsTimeMillis();
+                mNoGpsSinceTimeMillis =
+                    mLastFix != null ? mLastFix.timeMillis : getGpsTimeMillis();
             }
             return;
         }
