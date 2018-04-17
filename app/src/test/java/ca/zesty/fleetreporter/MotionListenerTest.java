@@ -134,8 +134,8 @@ public class MotionListenerTest implements PointListener {
             expectOnePoint());
     }
 
-    @Override public void onPoint(Point point) {
-        points.add(point);
+    @Override public void onPoint(Point point, boolean isProvisional) {
+        if (!isProvisional) points.add(point);
         System.out.println("Point: " + point);
     }
 
