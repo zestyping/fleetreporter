@@ -183,20 +183,23 @@ public class LocationService extends BaseService implements PointListener {
 
         long minutes = Math.max(0, (long) Math.ceil(
             (mNextRecordMillis - getGpsTimeMillis()) / 60000));
-        String message = (
+        String message =
             (mNoGpsSinceTimeMillis != null ? "GPS signal lost.  " : "") +
-            (mSmsFailingSinceMillis != null ? "Unable to send SMS.  " : "")
-        ).trim();
+            (mSmsFailingSinceMillis != null ? "Unable to send SMS.  " : "");
         if (message.isEmpty()) message = "Reporting your location.  ";
         if (mLastSmsSentMillis != null) message += Utils.format(
-            "Last SMS sent " + Utils.describeTime(mLastSmsSentMillis));
+            "Last SMS sent %s.", Utils.describeTime(mLastSmsSentMillis));
 
         return new NotificationCompat.Builder(this)
             .setContentTitle("Fleet Reporter")
-            .setContentText(message)
+            .setContentText(message.trim())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .build();
+    }
+
+    private void updateNotification() {
+        u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
     }
 
     /** Receives a new Point from the MotionListener. */
@@ -236,6 +239,7 @@ public class LocationService extends BaseService implements PointListener {
             checkWhetherToRecordPoint();
         }
 
+        updateNotification();
         sendBroadcast(new Intent(ACTION_POINT_RECEIVED));
     }
 
@@ -267,7 +271,7 @@ public class LocationService extends BaseService implements PointListener {
         mNumRecorded += 1;
         limitOutboxSize();
         checkWhetherToTransmitMessages();
-        u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
+        updateNotification();
 
         // Show the point in the app's text box.
         MainActivity.postLogMessage(this, "Recorded:\n    " + point.format());
@@ -323,7 +327,7 @@ public class LocationService extends BaseService implements PointListener {
                     mLastSmsSentMillis = getGpsTimeMillis();
                     mSmsFailingSinceMillis = null;
                 }
-                u.getNotificationManager().notify(NOTIFICATION_ID, buildNotification());
+                updateNotification();
             } else {
                 if (mSmsFailingSinceMillis == null) {
                     mSmsFailingSinceMillis = getGpsTimeMillis();
