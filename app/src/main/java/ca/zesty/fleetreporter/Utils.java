@@ -14,6 +14,7 @@ import android.os.PowerManager;
 import android.preference.PreferenceManager;
 import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
+import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.InputFilter;
@@ -198,18 +199,22 @@ public class Utils {
 
     /** Gets the mobile number from which this device sends text messages. */
     public String getSmsNumber() {
-        String number;
+        String number = null;
         if (android.os.Build.VERSION.SDK_INT >= 22) {
-            number = SubscriptionManager.from(context).getActiveSubscriptionInfo(
-                getSmsManager().getSubscriptionId()).getNumber();
-        } else {
+            int subscriptionId = getSmsManager().getSubscriptionId();
+            SubscriptionInfo sub = SubscriptionManager.from(
+                context).getActiveSubscriptionInfo(subscriptionId);
+            if (sub != null) number = sub.getNumber();
+        }
+        if (number == null) {
             number = getTelephonyManager().getLine1Number();
         }
+        if (number == null) return null;
         return "+" + number.replaceAll("^\\+*", "");
     }
 
     /** Gets the appropriate SmsManager to use for sending text messages.
-     From PataBasi by Kristen Tonga. */
+        From PataBasi by Kristen Tonga. */
     public SmsManager getSmsManager() {
         if (android.os.Build.VERSION.SDK_INT >= 22) {
             int subscriptionId = SmsManager.getDefaultSmsSubscriptionId();

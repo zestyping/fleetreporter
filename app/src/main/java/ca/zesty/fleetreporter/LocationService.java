@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.location.GpsStatus;
 import android.location.LocationManager;
 import android.os.Handler;
@@ -74,16 +75,15 @@ public class LocationService extends BaseService implements PointListener {
 
     private LocationAdapter mLocationAdapter = null;
     private NmeaListener mNmeaListener = null;
+    private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
     private Point mPoint = null;  // non-provisional, null means no GPS
     private LocationFix mLastFix = null;  // possibly provisional, never null after first assigned
     private LocationFix mDistanceAnchor = null;
     private double mMetersTravelledSinceStop = 0;
     private Long mNoGpsSinceTimeMillis = null;
 
-    private long mNextRecordMillis = 0;
-    private long mNextTransmitMillis = 0;
-    private long mNumRecorded = 0;
-    private long mNumSent = 0;
+    private Point mLastRecordedPoint;
+    private long mLastTransmissionAttemptMillis = 0;
     private Long mLastSmsSentMillis = null;
     private Long mSmsFailingSinceMillis = null;
     private SortedMap<Long, Point> mOutbox = new TreeMap<>(new Comparator<Long>() {
@@ -107,6 +107,11 @@ public class LocationService extends BaseService implements PointListener {
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
         mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
         mNmeaListener = new NmeaListener();
+        mPrefsListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
+            @Override public void onSharedPreferenceChanged(SharedPreferences preferences, String s) {
+                updateNotification();
+            }
+        };
     }
 
     /** Starts running the service. */
@@ -116,6 +121,7 @@ public class LocationService extends BaseService implements PointListener {
             isRunning = true;
             mWakeLock.acquire();
             startForeground(NOTIFICATION_ID, buildNotification());
+            u.getPrefs().registerOnSharedPreferenceChangeListener(mPrefsListener);
 
             // Activate the GPS receiver.
             mNoGpsSinceTimeMillis = getGpsTimeMillis();
@@ -138,6 +144,7 @@ public class LocationService extends BaseService implements PointListener {
         if (mWakeLock.isHeld()) mWakeLock.release();
         isRunning = false;
         unregisterReceiver(mSmsStatusReceiver);
+        u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
     }
 
@@ -181,14 +188,17 @@ public class LocationService extends BaseService implements PointListener {
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
 
-        long minutes = Math.max(0, (long) Math.ceil(
-            (mNextRecordMillis - getGpsTimeMillis()) / 60000));
         String message =
             (mNoGpsSinceTimeMillis != null ? "GPS signal lost.  " : "") +
             (mSmsFailingSinceMillis != null ? "Unable to send SMS.  " : "");
         if (message.isEmpty()) message = "Reporting your location.  ";
         if (mLastSmsSentMillis != null) message += Utils.format(
-            "Last SMS sent %s.", Utils.describeTime(mLastSmsSentMillis));
+            "Last SMS sent %s.  ", Utils.describeTime(mLastSmsSentMillis));
+        int minutes = (int) Math.max(
+            0, Math.ceil((getNextRecordingMillis() - getGpsTimeMillis()) / 60000));
+        message += minutes == 0 ?
+            "Next report in < 1 min." :
+            Utils.format("Next report in %d min.", minutes);
 
         return new NotificationCompat.Builder(this)
             .setContentTitle("Fleet Reporter")
@@ -248,27 +258,31 @@ public class LocationService extends BaseService implements PointListener {
         if (mPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
-            if (mPoint.isTransition() || getGpsTimeMillis() >= mNextRecordMillis) {
+            if (mPoint.isTransition() || getGpsTimeMillis() >= getNextRecordingMillis()) {
                 recordPoint(mPoint);
-
-                // We want pref_recording_interval to be the maximum interval
-                // between fix times, so schedule the next time based on the
-                // time elapsed after the fix time, not time elapsed after now.
-                mNextRecordMillis = mPoint.fix.timeMillis + (
-                    mPoint.type == Point.Type.GO ?
-                        u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_AFTER_GO, 1) :
-                        u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL, 10)
-                );
                 mPoint = null;
             }
         }
     }
 
+    /** Returns the time that we're next scheduled to record a point. */
+    private long getNextRecordingMillis() {
+        // We want pref_recording_interval to be the maximum interval
+        // between fix times, so schedule the next time based on the time
+        // elapsed after the fix time, not after when the point was sent.
+        if (mLastRecordedPoint == null) return getGpsTimeMillis();
+        return mLastRecordedPoint.fix.timeMillis + (
+            mLastRecordedPoint.type == Point.Type.GO ?
+                u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_AFTER_GO, 1) :
+                u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL, 10)
+        );
+    }
+
     /** Records a point in the outbox, to be sent out over SMS. */
     private void recordPoint(Point point) {
         mOutbox.put(point.getSeconds(), point);
+        mLastRecordedPoint = point;
         Log.i(TAG, "recordPoint: " + point + " (" + mOutbox.size() + " queued)");
-        mNumRecorded += 1;
         limitOutboxSize();
         checkWhetherToTransmitMessages();
         updateNotification();
@@ -279,9 +293,10 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Transmits points in the outbox, if it's not too soon to do so. */
     private void checkWhetherToTransmitMessages() {
-        if (getGpsTimeMillis() >= mNextTransmitMillis && mOutbox.size() > 0) {
+        if (mOutbox.size() > 0 &&
+            getGpsTimeMillis() >= mLastTransmissionAttemptMillis + TRANSMISSION_INTERVAL_MILLIS) {
+            mLastTransmissionAttemptMillis = getGpsTimeMillis();
             transmitMessages();
-            mNextTransmitMillis = getGpsTimeMillis() + TRANSMISSION_INTERVAL_MILLIS;
         }
     }
 
@@ -322,7 +337,6 @@ public class LocationService extends BaseService implements PointListener {
                 intent.hasExtra(EXTRA_SENT_KEYS)) {  // confirmation that SMS was sent
                 for (long key : intent.getLongArrayExtra(EXTRA_SENT_KEYS)) {
                     Log.i(TAG, "sent " + key + "; removing from outbox");
-                    mNumSent += 1;
                     mOutbox.remove(key);
                     mLastSmsSentMillis = getGpsTimeMillis();
                     mSmsFailingSinceMillis = null;
