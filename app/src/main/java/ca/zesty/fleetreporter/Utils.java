@@ -115,7 +115,13 @@ public class Utils {
 
     /** Describes a time period using a short phrase like "23 min". */
     public static String describePeriod(long elapsedMillis) {
+        return describePeriod(elapsedMillis, false);
+    }
+
+    /** Describes a time period using a short phrase like "23 min". */
+    public static String describePeriod(long elapsedMillis, boolean showSeconds) {
         long elapsedSec = elapsedMillis/1000;
+        if (elapsedSec < 60 && showSeconds) return format("%d sec", elapsedSec);
         if (elapsedSec < 3600) return format("%d min", elapsedSec/60);
         if (elapsedSec < 36000)
             return format("%.1f h", (float) elapsedSec/3600);
@@ -214,7 +220,7 @@ public class Utils {
     }
 
     /** Gets the appropriate SmsManager to use for sending text messages.
-        From PataBasi by Kristen Tonga. */
+     From PataBasi by Kristen Tonga. */
     public SmsManager getSmsManager() {
         if (android.os.Build.VERSION.SDK_INT >= 22) {
             int subscriptionId = SmsManager.getDefaultSmsSubscriptionId();
