@@ -247,6 +247,14 @@ public class Utils {
         return getPrefs().getString(key, defaultValue);
     }
 
+    public int getIntPref(String key, int defaultValue) {
+        int value = defaultValue;
+        try {
+            value = Integer.parseInt(getPrefs().getString(key, "x"));
+        } catch (NumberFormatException e) { }
+        return value;
+    }
+
     public long getMinutePrefInMillis(String key, double defaultMinutes) {
         double minutes = defaultMinutes;
         try {
