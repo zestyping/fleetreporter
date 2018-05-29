@@ -31,10 +31,9 @@ ext {
 android {
     compileSdkVersion 26
     buildToolsVersion "26.0.0"
-
     defaultConfig {
         applicationId "ca.zesty.fleetreporter"
-        minSdkVersion 15
+        minSdkVersion 16
         targetSdkVersion 26
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         versionCode getGitCommitCount()
