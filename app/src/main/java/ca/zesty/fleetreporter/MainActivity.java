@@ -233,6 +233,8 @@ public class MainActivity extends BaseActivity {
     }
 
     private void startLocationService() {
+        if (!isRegistered()) return;
+
         u.setPref(Prefs.RUNNING, "1");
         bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
         startService(new Intent(this, LocationService.class));
