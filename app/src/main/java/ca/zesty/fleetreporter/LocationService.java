@@ -1,6 +1,7 @@
 package ca.zesty.fleetreporter;
 
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -12,6 +13,7 @@ import android.location.GpsStatus;
 import android.location.LocationManager;
 import android.os.Handler;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 import android.util.Log;
@@ -61,6 +63,7 @@ public class LocationService extends BaseService implements PointListener {
     static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
     static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * 60 * 1000;
+    static final long ALARM_INTERVAL_MILLIS = 5 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
     static final String ACTION_POINT_RECEIVED = "FLEET_REPORTER_POINT_RECEIVED";
@@ -116,22 +119,27 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (!isRunning) {
-            // Grab the CPU.
-            isRunning = true;
-            mWakeLock.acquire();
-            startForeground(NOTIFICATION_ID, buildNotification());
-            u.getPrefs().registerOnSharedPreferenceChangeListener(mPrefsListener);
+        Log.i(TAG, "onStartCommand: flags = " + flags);
+        if (u.getIntPref(Prefs.PAUSED, 0) == 0) {
+            // Set an alarm to restart this service, in case it crashes.
+            setRestartAlarm();
+            if (!isRunning) {
+                // Grab the CPU.
+                isRunning = true;
+                mWakeLock.acquire();
+                startForeground(NOTIFICATION_ID, buildNotification());
+                u.getPrefs().registerOnSharedPreferenceChangeListener(mPrefsListener);
 
-            // Activate the GPS receiver.
-            mNoGpsSinceTimeMillis = getGpsTimeMillis();
-            u.getLocationManager().requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
-            u.getLocationManager().addNmeaListener(new NmeaListener());
+                // Activate the GPS receiver.
+                mNoGpsSinceTimeMillis = getGpsTimeMillis();
+                u.getLocationManager().requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
+                u.getLocationManager().addNmeaListener(new NmeaListener());
 
-            // Start periodically recording and transmitting points.
-            mHandler.postDelayed(mRunnable, 0);
-            sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
+                // Start periodically recording and transmitting points.
+                mHandler.postDelayed(mRunnable, 0);
+                sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
+            }
         }
         return START_STICKY;
     }
@@ -146,6 +154,18 @@ public class LocationService extends BaseService implements PointListener {
         unregisterReceiver(mSmsStatusReceiver);
         u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
+    }
+
+    private void setRestartAlarm() {
+        Log.i(TAG, "setRestartAlarm");
+        Intent intent = new Intent(this, LocationService.class);
+        PendingIntent pi = PendingIntent.getService(this, 0, intent, 0);
+        u.getAlarmManager().cancel(pi);
+        u.getAlarmManager().set(
+            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            SystemClock.elapsedRealtime() + ALARM_INTERVAL_MILLIS,
+            pi
+        );
     }
 
     public Long getNoGpsSinceTimeMillis() {

@@ -1,6 +1,7 @@
 package ca.zesty.fleetreporter;
 
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -173,6 +174,10 @@ public class Utils {
     public Utils(Activity activity) {
         this.activity = activity;
         this.context = activity;
+    }
+
+    public AlarmManager getAlarmManager() {
+        return (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
     }
 
     public LocationManager getLocationManager() {

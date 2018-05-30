@@ -70,8 +70,6 @@ public class MainActivity extends BaseActivity {
             }
         );
 
-        bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
-
         registerReceiver(mLogMessageReceiver, new IntentFilter(ACTION_LOG_MESSAGE));
         registerReceiver(mPointReceiver, new IntentFilter(LocationService.ACTION_POINT_RECEIVED));
         registerReceiver(mServiceChangedReceiver, new IntentFilter(LocationService.ACTION_SERVICE_CHANGED));
@@ -87,6 +85,11 @@ public class MainActivity extends BaseActivity {
                 mHandler.postDelayed(mRunnable, DISPLAY_INTERVAL_MILLIS);
             }
         };
+
+        bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
+        if (u.getIntPref(Prefs.PAUSED, 0) == 0) {
+            startLocationService();
+        }
     }
 
     @Override protected void onResume() {
@@ -230,11 +233,13 @@ public class MainActivity extends BaseActivity {
     }
 
     private void startLocationService() {
+        u.setPref(Prefs.PAUSED, "0");
         bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
         startService(new Intent(this, LocationService.class));
     }
 
     private void stopLocationService() {
+        u.setPref(Prefs.PAUSED, "1");
         try {
             unbindService(mServiceConnection);
         } catch (IllegalArgumentException e) {
@@ -275,6 +280,10 @@ public class MainActivity extends BaseActivity {
 
     class ServiceChangedReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
+            if (LocationService.isRunning) {
+                Intent service = new Intent(MainActivity.this, LocationService.class);
+                bindService(service, mServiceConnection, BIND_AUTO_CREATE);
+            }
             updateUiMode();
             updateReportingFrame();
         }
