@@ -87,7 +87,7 @@ public class MainActivity extends BaseActivity {
         };
 
         bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
-        if (u.getIntPref(Prefs.PAUSED, 0) == 0) {
+        if (u.getIntPref(Prefs.RUNNING, 0) == 1) {
             startLocationService();
         }
     }
@@ -233,13 +233,13 @@ public class MainActivity extends BaseActivity {
     }
 
     private void startLocationService() {
-        u.setPref(Prefs.PAUSED, "0");
+        u.setPref(Prefs.RUNNING, "1");
         bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
         startService(new Intent(this, LocationService.class));
     }
 
     private void stopLocationService() {
-        u.setPref(Prefs.PAUSED, "1");
+        u.setPref(Prefs.RUNNING, "0");
         try {
             unbindService(mServiceConnection);
         } catch (IllegalArgumentException e) {

@@ -120,7 +120,7 @@ public class LocationService extends BaseService implements PointListener {
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         Log.i(TAG, "onStartCommand: flags = " + flags);
-        if (u.getIntPref(Prefs.PAUSED, 0) == 0) {
+        if (u.getIntPref(Prefs.RUNNING, 0) == 1) {
             // Set an alarm to restart this service, in case it crashes.
             setRestartAlarm();
             if (!isRunning) {

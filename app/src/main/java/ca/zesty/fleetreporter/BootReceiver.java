@@ -8,7 +8,7 @@ import android.content.Intent;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (new Utils(context).getIntPref(Prefs.PAUSED, 0) == 0) {
+        if (new Utils(context).getIntPref(Prefs.RUNNING, 0) == 1) {
             context.startService(new Intent(context, LocationService.class));
         }
     }
