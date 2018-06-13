@@ -4,7 +4,7 @@
 .gradle
 .idea/misc.xml
 .idea/tasks.xml
-.idea/workspace.xml
+.idea/workspace*.xml
 .idea/**/libraries
 .idea/**/gradle.xml
 /apks
