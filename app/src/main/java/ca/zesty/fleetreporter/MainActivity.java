@@ -17,10 +17,13 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
+
 import com.crashlytics.android.Crashlytics;
-import io.fabric.sdk.android.Fabric;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import io.fabric.sdk.android.Fabric;
 
 public class MainActivity extends BaseActivity {
     static final String TAG = "MainActivity";
@@ -308,6 +311,10 @@ public class MainActivity extends BaseActivity {
             if (matcher.matches()) {
                 abortBroadcast();
                 assignReporter(sender, matcher.group(1), matcher.group(2));
+            }
+
+            if (body.trim().startsWith("crash test dummy")) {
+                throw new RuntimeException("crash test dummy");
             }
         }
 
