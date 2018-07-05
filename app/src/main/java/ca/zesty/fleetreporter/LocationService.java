@@ -337,6 +337,10 @@ public class LocationService extends BaseService implements PointListener {
         u.sendSms(destination, message.trim(), new Intent(ACTION_SMS_SENT).putExtra(
             EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys)
         ));
+
+        if (u.getPref(Prefs.SETTLING_PERIOD).equals("888")) {
+            throw new RuntimeException("888");
+        }
     }
 
     /** Ensure the outbox contains no more than MAX_OUTBOX_SIZE entries. */
