@@ -89,7 +89,7 @@ task copyDebugApk {
         println ''
         println 'Copying app-debug.apk to ' + filename
         copy {
-            from 'build/outputs/apk/app-debug.apk'
+            from 'build/outputs/apk/debug/app-debug.apk'
             into '../apks'
             rename 'app-debug.apk', filename
         }
