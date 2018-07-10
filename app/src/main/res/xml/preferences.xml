@@ -30,6 +30,11 @@
   <PreferenceScreen
     android:title="Developer settings">
 
+    <CheckBoxPreference
+        android:key="pref_show_log"
+        android:title="Show message log"
+        android:defaultValue="false" />
+
     <EditTextPreference
         android:key="pref_destination_number"
         android:title="Destination number"

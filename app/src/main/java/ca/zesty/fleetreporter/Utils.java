@@ -252,6 +252,10 @@ public class Utils {
         return getPrefs().getString(key, defaultValue);
     }
 
+    public boolean getBooleanPref(String key, boolean defaultValue) {
+        return getPrefs().getBoolean(key, defaultValue);
+    }
+
     public int getIntPref(String key, int defaultValue) {
         int value = defaultValue;
         try {
@@ -280,13 +284,16 @@ public class Utils {
     }
 
     public void hide(int id) {
-        if (activity == null) return;
-        activity.findViewById(id).setVisibility(View.GONE);
+        show(id, false);
     }
 
     public void show(int id) {
+        show(id, true);
+    }
+
+    public void show(int id, boolean visible) {
         if (activity == null) return;
-        activity.findViewById(id).setVisibility(View.VISIBLE);
+        activity.findViewById(id).setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     public void setText(int id, String text) {
