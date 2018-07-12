@@ -99,6 +99,7 @@ public class LocationService extends BaseService implements PointListener {
     private Long mNoGpsSinceTimeMillis = null;
     private long mLastBalanceCheckMillis = 0;
 
+    private String mLastReporterId;
     private Point mLastRecordedPoint;
     private long mLastTransmissionAttemptMillis = 0;
     private Long mLastSmsSentMillis = null;
@@ -292,6 +293,14 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Examines the last acquired point, and moves it to the outbox if necessary. */
     private void checkWhetherToRecordPoint() {
+        String reporterId = u.getPref(Prefs.REPORTER_ID);
+        if (!reporterId.equals(mLastReporterId)) {
+            // If registration has changed, we should restart the recording clock.
+            mLastReporterId = reporterId;
+            mLastRecordedPoint = null;
+            mLastTransmissionAttemptMillis = 0;
+            mLastSmsSentMillis = null;
+        }
         if (mPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
