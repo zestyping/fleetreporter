@@ -20,6 +20,7 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.InputFilter;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -27,6 +28,8 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -209,6 +212,24 @@ public class Utils {
         getSmsManager().sendTextMessage(recipient, null, body, sentIntent, null);
     }
 
+    /** Gets the GSM subscriber ID for a given SIM slot number (0, 1, etc.). */
+    public String getSubscriberId(int slot) {
+        if (android.os.Build.VERSION.SDK_INT >= 22) {
+            SubscriptionInfo sub = SubscriptionManager.from(
+                context).getActiveSubscriptionInfoForSimSlotIndex(slot);
+            try {
+                // The TelephonyManager.getSubscriberId(int) method is public but hidden.
+                Class cls = Class.forName("android.telephony.TelephonyManager");
+                Method method = cls.getMethod("getSubscriberId", new Class[] {int.class});
+                Object result = method.invoke(getTelephonyManager(), new Object[] {sub.getSubscriptionId()});
+                return (String) result;
+            } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                Log.e("Utils", "Failed to look up subscriber ID for slot " + slot, e);
+            }
+        }
+        return getTelephonyManager().getSubscriberId();
+    }
+
     /** Gets the mobile number from which this device sends text messages. */
     public String getSmsNumber() {
         String number = null;
@@ -277,9 +298,11 @@ public class Utils {
         getPrefs().edit().putString(key, value).commit();
     }
 
-    public void sendUssd(String code, int slot) {
+    public void sendUssd(int slot, String code) {
+        Log.i("Utils", "Slot " + slot + ": sending USSD code " + code);
         Intent intent = new Intent(Intent.ACTION_CALL);
-        intent.setData(Uri.parse(Uri.encode(code)));
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);  // required to start an Activity from a non-Activity context
+        intent.setData(Uri.parse("tel:" + Uri.encode(code)));
         intent.putExtra("simSlot", slot);  // understood by Samsung Duo phones only
         context.startActivity(intent);
     }
