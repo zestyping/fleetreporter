@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.location.LocationManager;
+import android.net.Uri;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
 import android.telephony.SmsManager;
@@ -274,6 +275,13 @@ public class Utils {
 
     public void setPref(String key, String value) {
         getPrefs().edit().putString(key, value).commit();
+    }
+
+    public void sendUssd(String code, int slot) {
+        Intent intent = new Intent(Intent.ACTION_CALL);
+        intent.setData(Uri.parse(Uri.encode(code)));
+        intent.putExtra("simSlot", slot);  // understood by Samsung Duo phones only
+        context.startActivity(intent);
     }
 
 
