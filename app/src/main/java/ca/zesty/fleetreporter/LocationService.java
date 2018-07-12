@@ -23,6 +23,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** A foreground service that records the device's GPS location and periodically
     reports it via SMS to the Fleet Map device.
@@ -63,7 +65,7 @@ public class LocationService extends BaseService implements PointListener {
     static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
     static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * 60 * 1000;
-    static final long ALARM_INTERVAL_MILLIS = 5 * 1000;
+    static final long ALARM_INTERVAL_MILLIS = 10 * 1000;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
     static final String ACTION_POINT_RECEIVED = "FLEET_REPORTER_POINT_RECEIVED";
@@ -71,16 +73,20 @@ public class LocationService extends BaseService implements PointListener {
     static final String ACTION_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
     static final String EXTRA_SENT_KEYS = "sent_keys";
 
-    // TODO(ping): These really depend on the mobile network provider.
+    // TODO(ping): These constants all depend on the mobile network provider.
     static final long CREDIT_CHECK_BUFFER_MILLIS = 30 * 60 * 1000;  // anticipate balance 30 minutes in future
     static final long CREDIT_LOW_THRESHOLD = 10;  // when balance falls this low, buy more
     static final long CREDIT_PURCHASE_TTL_MILLIS = 24 * 60 * 60 * 1000;  // purchased credit expires after this duration
-    static final String CREDIT_PURCHASE_USSD_CODE = "#100*2*1#";  // Orange 250-SMS "Kota Songo" bundle
-    static final long CREDIT_PURCHASE_AMOUNT = 50;  // balance measured in number of SMS messages
+    static final String CREDIT_PURCHASE_USSD_CODE = "#100*2*1#";  // Orange 250-SMS "Kota Songo" bundle purchase
+    static final long CREDIT_PURCHASE_SMS_COUNT = 50;  // number of SMS messages purchased in a bundle
+    static final long CREDIT_BALANCE_CHECK_INTERVAL_MILLIS = 10 * 60 * 1000;  // check balance every 10 minutes
+    static final String CREDIT_BALANCE_CHECK_USSD_CODE = "#100*2*2#";  // Orange 250-SMS "Kota Songo" balance check
+    static final Pattern CREDIT_BALANCE_CHECK_PATTERN = Pattern.compile("Vous disposez .* ([0-9]+) SMS");
 
     private Handler mHandler = null;
     private Runnable mRunnable = null;
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
+    private UssdReplyReceiver mUssdReplyReceiver = new UssdReplyReceiver();
     private PowerManager.WakeLock mWakeLock = null;
 
     private LocationAdapter mLocationAdapter = null;
@@ -91,6 +97,7 @@ public class LocationService extends BaseService implements PointListener {
     private LocationFix mDistanceAnchor = null;
     private double mMetersTravelledSinceStop = 0;
     private Long mNoGpsSinceTimeMillis = null;
+    private long mLastBalanceCheckMillis = 0;
 
     private Point mLastRecordedPoint;
     private long mLastTransmissionAttemptMillis = 0;
@@ -114,6 +121,7 @@ public class LocationService extends BaseService implements PointListener {
             }
         };
         registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
+        registerReceiver(mUssdReplyReceiver, new IntentFilter(UssdDialogReaderService.ACTION_USSD_RECEIVED));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
         mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
@@ -160,6 +168,7 @@ public class LocationService extends BaseService implements PointListener {
         if (mWakeLock.isHeld()) mWakeLock.release();
         isRunning = false;
         unregisterReceiver(mSmsStatusReceiver);
+        unregisterReceiver(mUssdReplyReceiver);
         u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
     }
@@ -346,19 +355,24 @@ public class LocationService extends BaseService implements PointListener {
             EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys)
         ));
 
+        // TODO(ping): Handle SIM slot selection.
         int slot = 0;
         String subscriberId = u.getSubscriberId(slot);
         adjustBalance(subscriberId, -1);
     }
 
     private void checkWhetherToPurchaseCredit(int slot) {
+        if (getGpsTimeMillis() > mLastBalanceCheckMillis + CREDIT_BALANCE_CHECK_INTERVAL_MILLIS) {
+            mLastBalanceCheckMillis = getGpsTimeMillis();
+            u.sendUssd(slot, CREDIT_BALANCE_CHECK_USSD_CODE);
+        }
         String subscriberId = u.getSubscriberId(slot);
         long balance = getBalance(subscriberId, getGpsTimeMillis() + CREDIT_CHECK_BUFFER_MILLIS);
         if (balance < CREDIT_LOW_THRESHOLD) {
             long expirationMillis = getGpsTimeMillis() + CREDIT_PURCHASE_TTL_MILLIS;
             u.sendUssd(slot, CREDIT_PURCHASE_USSD_CODE);
             // TODO(ping): Check for a valid response.
-            updateBalance(subscriberId, balance + CREDIT_PURCHASE_AMOUNT, expirationMillis);
+            updateBalance(subscriberId, balance + CREDIT_PURCHASE_SMS_COUNT, expirationMillis);
         }
     }
 
@@ -398,6 +412,19 @@ public class LocationService extends BaseService implements PointListener {
         Log.i(TAG, "Balance for subscriber ID " + subscriberId + " updated to: " + newAmount);
     }
 
+    private boolean updateBalance(String subscriberId, long newAmount) {
+        AppDatabase db = AppDatabase.getDatabase(this);
+        BalanceEntity balance = db.getBalanceDao().get(subscriberId);
+        if (balance != null) {
+            balance.amount = newAmount;
+            db.getBalanceDao().update(balance);
+            Log.i(TAG, "Balance for subscriber ID " + subscriberId + " updated to: " + balance.amount);
+            return true;
+        }
+        return false;
+    }
+
+
     /** Ensure the outbox contains no more than MAX_OUTBOX_SIZE entries. */
     private void limitOutboxSize() {
         while (mOutbox.size() > MAX_OUTBOX_SIZE) {
@@ -426,6 +453,17 @@ public class LocationService extends BaseService implements PointListener {
                     mSmsFailingSinceMillis = getGpsTimeMillis();
                 }
                 Log.i(TAG, "failed to send SMS message");
+            }
+        }
+    }
+
+    class UssdReplyReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            String message = intent.getStringExtra(UssdDialogReaderService.EXTRA_USSD_MESSAGE);
+            Matcher matcher = CREDIT_BALANCE_CHECK_PATTERN.matcher(message);
+            if (matcher.find()) {
+                long amount = Long.parseLong(matcher.group(1));
+                updateBalance(u.getSubscriberId(0), amount);
             }
         }
     }

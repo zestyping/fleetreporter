@@ -355,13 +355,18 @@ public class Utils {
         child.setVisibility(View.VISIBLE);
     }
 
-    /** Shows a simple message box with an OK button. */
-    public void showMessageBox(String title, String message) {
+    /** Shows a simple message box and invokes the listener when the user taps OK. */
+    public void showMessageBox(String title, String message, DialogInterface.OnClickListener listener) {
         new AlertDialog.Builder(context)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("OK", null)
+            .setPositiveButton("OK", listener)
             .show();
+    }
+
+    /** Shows a simple message box with an OK button. */
+    public void showMessageBox(String title, String message) {
+        showMessageBox(title, message, null);
     }
 
     /** Shows a simple prompt dialog with a single text entry field. */

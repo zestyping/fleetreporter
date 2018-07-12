@@ -3,7 +3,9 @@ package ca.zesty.fleetreporter;
 import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
@@ -11,8 +13,10 @@ import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.telephony.SmsMessage;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -59,6 +63,10 @@ public class MainActivity extends BaseActivity {
             Manifest.permission.SEND_SMS,
             Manifest.permission.WAKE_LOCK
         }, 0);
+
+        if (!isAccessibilityServiceEnabled()) {
+            promptUserToEnableAccessibilityService();
+        }
 
         findViewById(R.id.register_button).setOnClickListener(
             new View.OnClickListener() {
@@ -273,6 +281,40 @@ public class MainActivity extends BaseActivity {
         context.sendBroadcast(new Intent(ACTION_LOG_MESSAGE).putExtra(EXTRA_LOG_MESSAGE,
             Utils.formatUtcTimeSeconds(System.currentTimeMillis()) + " - " + message
         ));
+    }
+
+    boolean isAccessibilityServiceEnabled() {
+        ContentResolver resolver = getApplicationContext().getContentResolver();
+        String serviceNames = "";
+        try {
+            if (Settings.Secure.getInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED) == 1) {
+                serviceNames = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            }
+        } catch (Settings.SettingNotFoundException e) {
+            return false;
+        }
+        String expectedName = getPackageName() + "/" + UssdDialogReaderService.class.getCanonicalName();
+        for (String name : serviceNames.split(":")) {
+            Log.d(TAG, "Found accessibility service: " + name);
+            if (name.equals(expectedName)) return true;
+        }
+        return false;
+    }
+
+    void promptUserToEnableAccessibilityService() {
+        u.showMessageBox(
+            "Settings change needed",
+            "To enable automatic purchasing of SMS credit, please:\n" +
+                "    \u2022 Open your Accessibility Settings\n" +
+                "    \u2022 Scroll down to the bottom\n" +
+                "    \u2022 Enable the \"Fleet Reporter\" service\n" +
+                "    \u2022 Return to this app",
+            new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface dialog, int which) {
+                    startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                }
+            }
+        );
     }
 
     class LogMessageReceiver extends BroadcastReceiver {
