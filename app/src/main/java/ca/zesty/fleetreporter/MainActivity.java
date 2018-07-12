@@ -209,7 +209,7 @@ public class MainActivity extends BaseActivity {
                 "sent last report\n" + Utils.describeTime(smsSentMillis) :
                 "unable to send since\n" + Utils.describeTime(smsFailMillis));
         } else if (smsSentMillis != null) {
-            u.setText(R.id.sms, "\u2714", 0xff00a020);
+            u.setText(R.id.sms, "\u2713", 0xff00a020);
             u.setText(R.id.sms_details, "sent last report\n" + Utils.describeTime(smsSentMillis));
         } else {
             u.setText(R.id.sms, "no SMS", 0xff808080);
