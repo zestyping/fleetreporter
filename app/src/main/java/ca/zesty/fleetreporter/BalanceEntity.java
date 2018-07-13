@@ -5,6 +5,8 @@ import android.arch.persistence.room.Entity;
 import android.arch.persistence.room.PrimaryKey;
 import android.support.annotation.NonNull;
 
+import java.util.Locale;
+
 @Entity(tableName = "balances")
 public class BalanceEntity {
     @PrimaryKey @NonNull
@@ -17,5 +19,15 @@ public class BalanceEntity {
         this.subscriberId = subscriberId;
         this.amount = amount;
         this.expirationMillis = expirationMillis;
+    }
+
+    public String toString() {
+        final float HOUR_MILLIS = 60 * 60 * 1000;
+        long ttlMillis = expirationMillis - System.currentTimeMillis();
+        return String.format(
+            Locale.US,
+            "<Balance %d, expiring in %.1f h, for subscriber %s>",
+            amount, (float) ttlMillis / HOUR_MILLIS, subscriberId
+        );
     }
 }

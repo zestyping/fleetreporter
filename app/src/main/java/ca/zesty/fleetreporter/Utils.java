@@ -5,6 +5,7 @@ import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -14,6 +15,7 @@ import android.location.LocationManager;
 import android.net.Uri;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
 import android.telephony.SubscriptionInfo;
@@ -200,6 +202,23 @@ public class Utils {
         return (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
     }
 
+    public boolean isAccessibilityServiceEnabled(Class cls) {
+        ContentResolver resolver = context.getApplicationContext().getContentResolver();
+        String expectedServiceName = context.getPackageName() + "/" + cls.getCanonicalName();
+        String serviceNames = "";
+        try {
+            if (Settings.Secure.getInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED) == 1) {
+                serviceNames = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            }
+        } catch (Settings.SettingNotFoundException e) {
+            return false;
+        }
+        for (String name : serviceNames.split(":")) {
+            if (name.equals(expectedServiceName)) return true;
+        }
+        return false;
+    }
+
     /** Sends a text message using the default SmsManager. */
     public void sendSms(String recipient, String body) {
         sendSms(recipient, body, null);
@@ -355,18 +374,18 @@ public class Utils {
         child.setVisibility(View.VISIBLE);
     }
 
-    /** Shows a simple message box and invokes the listener when the user taps OK. */
-    public void showMessageBox(String title, String message, DialogInterface.OnClickListener listener) {
+    /** Shows a message box with a single button that invokes the given listener. */
+    public void showMessageBox(String title, String message, String buttonLabel, DialogInterface.OnClickListener listener) {
         new AlertDialog.Builder(context)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("OK", listener)
+            .setPositiveButton(buttonLabel, listener)
             .show();
     }
 
     /** Shows a simple message box with an OK button. */
     public void showMessageBox(String title, String message) {
-        showMessageBox(title, message, null);
+        showMessageBox(title, message, "OK", null);
     }
 
     /** Shows a simple prompt dialog with a single text entry field. */

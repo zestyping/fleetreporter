@@ -18,8 +18,13 @@ import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 import android.util.Log;
 
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -74,14 +79,19 @@ public class LocationService extends BaseService implements PointListener {
     static final String EXTRA_SENT_KEYS = "sent_keys";
 
     // TODO(ping): These constants all depend on the mobile network provider.
-    static final long CREDIT_CHECK_BUFFER_MILLIS = 30 * 60 * 1000;  // anticipate balance 30 minutes in future
     static final long CREDIT_LOW_THRESHOLD = 10;  // when balance falls this low, buy more
-    static final long CREDIT_PURCHASE_TTL_MILLIS = 24 * 60 * 60 * 1000;  // purchased credit expires after this duration
+    static final long CREDIT_PURCHASE_TTL_MILLIS = 23 * 60 * 60 * 1000;  // assume purchased credit expires after this duration
     static final String CREDIT_PURCHASE_USSD_CODE = "#100*2*1#";  // Orange 250-SMS "Kota Songo" bundle purchase
+    static final Pattern CREDIT_PURCHASE_COMPLETED_PATTERN = Pattern.compile("Votre forfait.*est activ");
     static final long CREDIT_PURCHASE_SMS_COUNT = 50;  // number of SMS messages purchased in a bundle
     static final long CREDIT_BALANCE_CHECK_INTERVAL_MILLIS = 10 * 60 * 1000;  // check balance every 10 minutes
     static final String CREDIT_BALANCE_CHECK_USSD_CODE = "#100*2*2#";  // Orange 250-SMS "Kota Songo" balance check
     static final Pattern CREDIT_BALANCE_CHECK_PATTERN = Pattern.compile("Vous disposez .* ([0-9]+) SMS");
+    static final Pattern CREDIT_BALANCE_EMPTY_PATTERN = Pattern.compile("pas de forfait en cours");
+    static final long CREDIT_BALANCE_DEFAULT_TTL_MILLIS = 60 * 60 * 1000;  // if no expiration time can be parsed, assume balance expires after this duration
+    static final Pattern CREDIT_BALANCE_EXPIRATION_PATTERN = Pattern.compile("valable jusqu'au (\\d+-\\d+-\\d+ )\\D{0,6}(\\d+:\\d+:\\d+)");
+    static final String CREDIT_BALANCE_EXPIRATION_FORMAT = "$1 $2 +0100";  // format for pattern groups above, to be parsed by parser below
+    static final DateFormat CREDIT_BALANCE_EXPIRATION_PARSER = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss Z");
 
     private Handler mHandler = null;
     private Runnable mRunnable = null;
@@ -367,72 +377,75 @@ public class LocationService extends BaseService implements PointListener {
         // TODO(ping): Handle SIM slot selection.
         int slot = 0;
         String subscriberId = u.getSubscriberId(slot);
-        adjustBalance(subscriberId, -1);
+        adjustBalance(subscriberId, -1, null);
     }
 
     private void checkWhetherToPurchaseCredit(int slot) {
+        if (!u.isAccessibilityServiceEnabled(UssdDialogReaderService.class)) {
+            Log.w(TAG, "Accessibility service not enabled, skipping credit check");
+            return;
+        }
         if (getGpsTimeMillis() > mLastBalanceCheckMillis + CREDIT_BALANCE_CHECK_INTERVAL_MILLIS) {
             mLastBalanceCheckMillis = getGpsTimeMillis();
             u.sendUssd(slot, CREDIT_BALANCE_CHECK_USSD_CODE);
         }
         String subscriberId = u.getSubscriberId(slot);
-        long balance = getBalance(subscriberId, getGpsTimeMillis() + CREDIT_CHECK_BUFFER_MILLIS);
-        if (balance < CREDIT_LOW_THRESHOLD) {
-            long expirationMillis = getGpsTimeMillis() + CREDIT_PURCHASE_TTL_MILLIS;
+        Long amount = getBalanceAmount(getBalance(subscriberId));
+        Log.i(TAG, "Subscriber " + subscriberId + " balance is: " + amount);
+        if (amount != null && amount < CREDIT_LOW_THRESHOLD) {
             u.sendUssd(slot, CREDIT_PURCHASE_USSD_CODE);
-            // TODO(ping): Check for a valid response.
-            updateBalance(subscriberId, balance + CREDIT_PURCHASE_SMS_COUNT, expirationMillis);
         }
     }
 
-    private long getBalance(String subscriberId, Long checkMillis) {
+    /** Gets the estimated balance record for a given IMSI, returning null if unknown. */
+    private BalanceEntity getBalance(String subscriberId) {
         AppDatabase db = AppDatabase.getDatabase(this);
-        BalanceEntity balance = db.getBalanceDao().get(subscriberId);
-        long amount = 0;
-        if (balance != null) {
-            if (checkMillis == null || checkMillis < balance.expirationMillis) {
-                amount = balance.amount;
+        try {
+            return db.getBalanceDao().get(subscriberId);
+        } finally {
+            db.close();
+        }
+    }
+
+    /** Gets the amount from the estimated balance record, returning 0 if expired and null if unknown. */
+    private Long getBalanceAmount(BalanceEntity balance) {
+        if (balance == null) return null;
+        return getGpsTimeMillis() < balance.expirationMillis ? balance.amount : 0;
+    }
+
+    /** Sets the estimated balance amount and expiration time, for a given IMSI. */
+    private void setBalance(String subscriberId, long amount, long expirationMillis) {
+        AppDatabase db = AppDatabase.getDatabase(this);
+        try {
+            BalanceEntity balance = new BalanceEntity(subscriberId, amount, expirationMillis);
+            if (db.getBalanceDao().update(balance) == 0) {
+                db.getBalanceDao().insert(balance);
             }
+            Log.i(TAG, "Stored " + balance);
+        } finally {
+            db.close();
         }
-        Log.i(TAG, "Balance for subscriber ID " + subscriberId + " is: " + amount);
-        return amount;
     }
 
-    private boolean adjustBalance(String subscriberId, long deltaAmount) {
-        AppDatabase db = AppDatabase.getDatabase(this);
-        BalanceEntity balance = db.getBalanceDao().get(subscriberId);
-        if (balance != null) {
-            balance.amount += deltaAmount;
-            db.getBalanceDao().update(balance);
-            Log.i(TAG, "Balance for subscriber ID " + subscriberId + " updated to: " + balance.amount);
-            return true;
+    /**
+     * Adjusts the estimated balance for a given IMSI up or down by a given amount,
+     * and updating the expiration time if optExpirationMillis is non-null.  The stored
+     * balance is intended to be a minimum estimate; if the balance is unknown to
+     * begin with, then decrementing it leaves it unknown, whereas incrementing it
+     * sets the estimate to the increment (i.e. the true balance is now known to be
+     * at least as much as the increment).
+     */
+    private void adjustBalance(String subscriberId, long deltaAmount, Long optExpirationMillis) {
+        BalanceEntity balance = getBalance(subscriberId);
+        if (balance != null || deltaAmount > 0) {
+            long amount = balance != null ? getBalanceAmount(balance) : 0;
+            long expirationMillis =
+                optExpirationMillis != null ? optExpirationMillis :
+                balance != null ? balance.expirationMillis :
+                getGpsTimeMillis() + CREDIT_BALANCE_DEFAULT_TTL_MILLIS;
+            setBalance(subscriberId, amount + deltaAmount, expirationMillis);
         }
-        return false;
     }
-
-    private void updateBalance(String subscriberId, long newAmount, long newExpirationMillis) {
-        AppDatabase db = AppDatabase.getDatabase(this);
-        BalanceEntity balance = new BalanceEntity(
-            subscriberId, newAmount, newExpirationMillis
-        );
-        if (db.getBalanceDao().update(balance) == 0) {
-            db.getBalanceDao().insert(balance);
-        }
-        Log.i(TAG, "Balance for subscriber ID " + subscriberId + " updated to: " + newAmount);
-    }
-
-    private boolean updateBalance(String subscriberId, long newAmount) {
-        AppDatabase db = AppDatabase.getDatabase(this);
-        BalanceEntity balance = db.getBalanceDao().get(subscriberId);
-        if (balance != null) {
-            balance.amount = newAmount;
-            db.getBalanceDao().update(balance);
-            Log.i(TAG, "Balance for subscriber ID " + subscriberId + " updated to: " + balance.amount);
-            return true;
-        }
-        return false;
-    }
-
 
     /** Ensure the outbox contains no more than MAX_OUTBOX_SIZE entries. */
     private void limitOutboxSize() {
@@ -468,11 +481,26 @@ public class LocationService extends BaseService implements PointListener {
 
     class UssdReplyReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
+            String subscriberId = u.getSubscriberId(0);
             String message = intent.getStringExtra(UssdDialogReaderService.EXTRA_USSD_MESSAGE);
             Matcher matcher = CREDIT_BALANCE_CHECK_PATTERN.matcher(message);
+            long expirationMillis = getGpsTimeMillis() + CREDIT_BALANCE_DEFAULT_TTL_MILLIS;
             if (matcher.find()) {
                 long amount = Long.parseLong(matcher.group(1));
-                updateBalance(u.getSubscriberId(0), amount);
+                matcher = CREDIT_BALANCE_EXPIRATION_PATTERN.matcher(message);
+                if (matcher.find()) {
+                    try {
+                        String expirationStamp = CREDIT_BALANCE_EXPIRATION_PATTERN.matcher(matcher.group()).replaceAll(CREDIT_BALANCE_EXPIRATION_FORMAT);
+                        expirationMillis = CREDIT_BALANCE_EXPIRATION_PARSER.parse(expirationStamp).getTime();
+                    } catch (ParseException e) {
+                        Log.e(TAG, "Could not parse expiration time from: " + matcher.group());
+                    }
+                }
+                setBalance(subscriberId, amount, expirationMillis);
+            } else if (CREDIT_BALANCE_EMPTY_PATTERN.matcher(message).find()) {
+                setBalance(subscriberId, 0, expirationMillis);
+            } else if (CREDIT_PURCHASE_COMPLETED_PATTERN.matcher(message).find()) {
+                adjustBalance(subscriberId, CREDIT_PURCHASE_SMS_COUNT, getGpsTimeMillis() + CREDIT_PURCHASE_TTL_MILLIS);
             }
         }
     }
