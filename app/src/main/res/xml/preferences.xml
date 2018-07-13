@@ -6,7 +6,7 @@
   <EditTextPreference
       android:key="pref_recording_interval"
       android:title="Recording interval"
-      android:summary="Maximum number of minutes between recorded points"
+      android:summary="Maximum minutes between recorded points"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="10" />
@@ -14,7 +14,7 @@
   <EditTextPreference
       android:key="pref_recording_interval_after_go"
       android:title="Recording interval upon starting to move"
-      android:summary="Number of minutes after departing from a stop to record an extra point"
+      android:summary="Minutes after departing from a stop to record an extra point"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="1" />
@@ -22,10 +22,20 @@
   <EditTextPreference
       android:key="pref_settling_period"
       android:title="Settling period"
-      android:summary="Number of minutes of not moving to interpret as a stop"
+      android:summary="Minutes of not moving to interpret as a stop"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="2" />
+
+  <ca.zesty.fleetreporter.TimePreference
+      android:key="pref_sleep_start"
+      android:title="Sleep starting time"
+      android:summary="Start of daily period when reporting is suppressed" />
+
+  <ca.zesty.fleetreporter.TimePreference
+      android:key="pref_sleep_end"
+      android:title="Sleep ending time"
+      android:summary="End of daily period when reporting is suppressed" />
 
   <PreferenceScreen
     android:title="Developer settings">

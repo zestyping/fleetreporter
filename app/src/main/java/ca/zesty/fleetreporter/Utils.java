@@ -152,6 +152,26 @@ public class Utils {
         return format("%.0f km", 0.001 * meters);
     }
 
+    public static int countMinutesFromMidnight(String hourMinute) {
+        String[] parts = hourMinute.split(":");
+        if (parts.length < 2) return 0;
+        int hours = Integer.parseInt(parts[0]);
+        int minutes = Integer.parseInt(parts[1]);
+        return hours * 60 + minutes;
+    }
+
+    public static boolean isLocalTimeOfDayBetween(String startHourMinute, String endHourMinute) {
+        int startMinutes = countMinutesFromMidnight(startHourMinute);
+        int endMinutes = countMinutesFromMidnight(endHourMinute);
+        Calendar currentTime = Calendar.getInstance();
+        int currentMinutes = currentTime.get(Calendar.HOUR_OF_DAY) * 60 + currentTime.get(Calendar.MINUTE);
+        if (startMinutes <= endMinutes) {
+            return startMinutes <= currentMinutes && currentMinutes < endMinutes;
+        } else {
+            return startMinutes <= currentMinutes || currentMinutes < endMinutes;
+        }
+    }
+
     public static IntentFilter getMaxPrioritySmsFilter() {
         IntentFilter filter = new IntentFilter("android.provider.Telephony.SMS_RECEIVED");
         filter.setPriority(Integer.MAX_VALUE);

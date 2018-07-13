@@ -311,6 +311,10 @@ public class LocationService extends BaseService implements PointListener {
             mLastTransmissionAttemptMillis = 0;
             mLastSmsSentMillis = null;
         }
+        if (Utils.isLocalTimeOfDayBetween(u.getPref(Prefs.SLEEP_START), u.getPref(Prefs.SLEEP_END))) {
+            Log.i(TAG, "Current time is within sleep period; not recording");
+            return;
+        }
         if (mPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
