@@ -157,8 +157,15 @@ public class MainActivity extends BaseActivity {
         if (isRegistered()) {
             u.setText(R.id.reporter_label, u.getPref(Prefs.REPORTER_LABEL));
             if (LocationService.isRunning) {
-                u.setText(R.id.mode_label, "Reporting as:");
-                u.showFrameChild(R.id.reporting_frame);
+                String sleepStart = u.getPref(Prefs.SLEEP_START);
+                String sleepEnd = u.getPref(Prefs.SLEEP_END);
+                if (Utils.isLocalTimeOfDayBetween(sleepStart, sleepEnd)) {
+                    u.setText(R.id.sleep_mode_label, Utils.format("Sleep mode\n\n%s \u2013 %s", sleepStart, sleepEnd));
+                    u.showFrameChild(R.id.sleep_mode_label);
+                } else {
+                    u.setText(R.id.mode_label, "Reporting as:");
+                    u.showFrameChild(R.id.reporting_frame);
+                }
             } else {
                 u.setText(R.id.mode_label, "Reporting is paused!");
                 u.showFrameChild(R.id.unpause_button);
@@ -207,7 +214,7 @@ public class MainActivity extends BaseActivity {
                 "sent last report\n" + Utils.describeTime(smsSentMillis) :
                 "unable to send since\n" + Utils.describeTime(smsFailMillis));
         } else if (smsSentMillis != null) {
-            u.setText(R.id.sms, "\u2713", 0xff00a020);
+            u.setText(R.id.sms, "SMS \u2713", 0xff00a020);
             u.setText(R.id.sms_details, "sent last report\n" + Utils.describeTime(smsSentMillis));
         } else {
             u.setText(R.id.sms, "no SMS", 0xff808080);

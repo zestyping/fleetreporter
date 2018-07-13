@@ -65,6 +65,15 @@
         android:text="Unpause"
         android:visibility="invisible" />
 
+    <TextView
+        android:id="@+id/sleep_mode_label"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:textSize="25sp"
+        android:text="Sleep mode&#10;&#10;"
+        android:textAlignment="center"
+        android:visibility="invisible" />
+
     <TableLayout
         android:id="@+id/reporting_frame"
         android:layout_width="match_parent"

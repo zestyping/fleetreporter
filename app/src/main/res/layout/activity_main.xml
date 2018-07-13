@@ -52,7 +52,7 @@
     <Button
         android:id="@+id/register_button"
         android:layout_width="match_parent"
-        android:layout_height="fill_parent"
+        android:layout_height="match_parent"
         android:textSize="25sp"
         android:text="Register now"
         android:visibility="invisible" />
@@ -60,9 +60,19 @@
     <Button
         android:id="@+id/unpause_button"
         android:layout_width="match_parent"
-        android:layout_height="fill_parent"
+        android:layout_height="match_parent"
         android:textSize="25sp"
         android:text="Unpause"
+        android:visibility="invisible" />
+
+    <TextView
+        android:id="@+id/sleep_mode_label"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingTop="25sp"
+        android:textSize="25sp"
+        android:text="Sleep mode&#10;&#10;"
+        android:textAlignment="center"
         android:visibility="invisible" />
 
     <TableLayout
