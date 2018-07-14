@@ -22,6 +22,7 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.InputFilter;
+import android.text.Spanned;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -184,6 +185,28 @@ public class Utils {
             return SmsMessage.createFromPdu((byte[]) pdu);
         }
         return null;
+    }
+
+    public static class PrintableAsciiFilter implements InputFilter {
+        @Override public CharSequence filter(
+            CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
+            for (int i = start; i < end; i++) {
+                char c = source.charAt(i);
+                if (!(c >= 32 && c <= 126)) return "";
+            }
+            return null;
+        }
+    }
+
+    public static class MobileNumberFilter implements InputFilter {
+        @Override public CharSequence filter(
+            CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
+            for (int i = start; i < end; i++) {
+                char c = source.charAt(i);
+                if (!(c == '+' || c >= '0' && c <= '9')) return "";
+            }
+            return null;
+        }
     }
 
 
