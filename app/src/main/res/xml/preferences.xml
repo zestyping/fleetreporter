@@ -37,6 +37,14 @@
       android:title="Sleep ending time"
       android:summary="End of daily period when reporting is suppressed" />
 
+  <EditTextPreference
+      android:key="pref_sms_purchasing_interval"
+      android:title="SMS purchasing interval"
+      android:summary="Minutes after an SMS purchase to hold off purchasing again"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="60" />
+
   <PreferenceScreen
     android:title="Developer settings">
 

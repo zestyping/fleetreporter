@@ -65,11 +65,14 @@ public class LocationService extends BaseService implements PointListener {
 
     static final String TAG = "LocationService";
     static final int NOTIFICATION_ID = 1;
-    static final long LOCATION_INTERVAL_MILLIS = 1000;
-    static final long CHECK_INTERVAL_MILLIS = 10 * 1000;
-    static final long TRANSMISSION_INTERVAL_MILLIS = 30 * 1000;
-    static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * 60 * 1000;
-    static final long ALARM_INTERVAL_MILLIS = 10 * 1000;
+    static final long SECOND = 1000;
+    static final long MINUTE = 60 * SECOND;
+    static final long HOUR = 60 * MINUTE;
+    static final long LOCATION_INTERVAL_MILLIS = SECOND;
+    static final long CHECK_INTERVAL_MILLIS = 10 * SECOND;
+    static final long TRANSMISSION_INTERVAL_MILLIS = 30 * SECOND;
+    static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * MINUTE;
+    static final long ALARM_INTERVAL_MILLIS = 10 * SECOND;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
     static final String ACTION_POINT_RECEIVED = "FLEET_REPORTER_POINT_RECEIVED";
@@ -80,15 +83,15 @@ public class LocationService extends BaseService implements PointListener {
 
     // TODO(ping): These constants all depend on the mobile network provider.
     static final long CREDIT_LOW_THRESHOLD = 10;  // when balance falls this low, buy more
-    static final long CREDIT_PURCHASE_TTL_MILLIS = 23 * 60 * 60 * 1000;  // assume purchased credit expires after this duration
+    static final long CREDIT_PURCHASE_TTL_MILLIS = 23 * HOUR;  // assume purchased credit expires after this duration
     static final String CREDIT_PURCHASE_USSD_CODE = "#100*2*1#";  // Orange 250-SMS "Kota Songo" bundle purchase
     static final Pattern CREDIT_PURCHASE_COMPLETED_PATTERN = Pattern.compile("Votre forfait.*est activ");
     static final long CREDIT_PURCHASE_SMS_COUNT = 50;  // number of SMS messages purchased in a bundle
-    static final long CREDIT_BALANCE_CHECK_INTERVAL_MILLIS = 10 * 60 * 1000;  // check balance every 10 minutes
+    static final long CREDIT_BALANCE_CHECK_INTERVAL_MILLIS = 10 * MINUTE;  // check balance every 10 minutes
     static final String CREDIT_BALANCE_CHECK_USSD_CODE = "#100*2*2#";  // Orange 250-SMS "Kota Songo" balance check
     static final Pattern CREDIT_BALANCE_CHECK_PATTERN = Pattern.compile("Vous disposez .* ([0-9]+) SMS");
     static final Pattern CREDIT_BALANCE_EMPTY_PATTERN = Pattern.compile("pas de forfait en cours");
-    static final long CREDIT_BALANCE_DEFAULT_TTL_MILLIS = 60 * 60 * 1000;  // if no expiration time can be parsed, assume balance expires after this duration
+    static final long CREDIT_BALANCE_DEFAULT_TTL_MILLIS = HOUR;  // if no expiration time can be parsed, assume balance expires after this duration
     static final Pattern CREDIT_BALANCE_EXPIRATION_PATTERN = Pattern.compile("valable jusqu'au (\\d+-\\d+-\\d+ )\\D{0,6}(\\d+:\\d+:\\d+)");
     static final String CREDIT_BALANCE_EXPIRATION_FORMAT = "$1 $2 +0100";  // format for pattern groups above, to be parsed by parser below
     static final DateFormat CREDIT_BALANCE_EXPIRATION_PARSER = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss Z");
@@ -107,6 +110,7 @@ public class LocationService extends BaseService implements PointListener {
     private LocationFix mDistanceAnchor = null;
     private double mMetersTravelledSinceStop = 0;
     private Long mNoGpsSinceTimeMillis = null;
+    private long mLastSmsPurchaseMillis = 0;
     private long mLastBalanceCheckMillis = 0;
 
     private String mLastReporterId;
@@ -395,15 +399,23 @@ public class LocationService extends BaseService implements PointListener {
             Log.w(TAG, "Accessibility service not enabled, skipping credit check");
             return;
         }
-        if (getGpsTimeMillis() > mLastBalanceCheckMillis + CREDIT_BALANCE_CHECK_INTERVAL_MILLIS) {
-            mLastBalanceCheckMillis = getGpsTimeMillis();
+        long now = getGpsTimeMillis();
+        if (now > mLastBalanceCheckMillis + CREDIT_BALANCE_CHECK_INTERVAL_MILLIS) {
+            mLastBalanceCheckMillis = now;
             u.sendUssd(slot, CREDIT_BALANCE_CHECK_USSD_CODE);
         }
         String subscriberId = u.getImsi(slot);
         Long amount = getBalanceAmount(getBalance(subscriberId));
         Log.i(TAG, "Subscriber " + subscriberId + " balance is: " + amount);
         if (amount != null && amount < CREDIT_LOW_THRESHOLD) {
-            u.sendUssd(slot, CREDIT_PURCHASE_USSD_CODE);
+            long purchaseIntervalMillis = u.getIntPref(Prefs.SMS_PURCHASING_INTERVAL, 60) * HOUR;
+            long waitMillis = mLastSmsPurchaseMillis + purchaseIntervalMillis - now;
+            if (waitMillis > 0) {
+                Log.i(TAG, "Must wait " + (waitMillis / MINUTE) + " min before purchasing another SMS package");
+            } else {
+                Log.i(TAG, "Purchasing an SMS package");
+                u.sendUssd(slot, CREDIT_PURCHASE_USSD_CODE);
+            }
         }
     }
 
@@ -509,7 +521,8 @@ public class LocationService extends BaseService implements PointListener {
             String subscriberId = u.getImsi(0);
             String message = intent.getStringExtra(UssdDialogReaderService.EXTRA_USSD_MESSAGE);
             Matcher matcher = CREDIT_BALANCE_CHECK_PATTERN.matcher(message);
-            long expirationMillis = getGpsTimeMillis() + CREDIT_BALANCE_DEFAULT_TTL_MILLIS;
+            long now = getGpsTimeMillis();
+            long expirationMillis = now + CREDIT_BALANCE_DEFAULT_TTL_MILLIS;
             if (matcher.find()) {
                 long amount = Long.parseLong(matcher.group(1));
                 matcher = CREDIT_BALANCE_EXPIRATION_PATTERN.matcher(message);
@@ -525,7 +538,8 @@ public class LocationService extends BaseService implements PointListener {
             } else if (CREDIT_BALANCE_EMPTY_PATTERN.matcher(message).find()) {
                 setBalance(subscriberId, 0, expirationMillis);
             } else if (CREDIT_PURCHASE_COMPLETED_PATTERN.matcher(message).find()) {
-                adjustBalance(subscriberId, CREDIT_PURCHASE_SMS_COUNT, getGpsTimeMillis() + CREDIT_PURCHASE_TTL_MILLIS);
+                mLastSmsPurchaseMillis = now;
+                adjustBalance(subscriberId, CREDIT_PURCHASE_SMS_COUNT, now + CREDIT_PURCHASE_TTL_MILLIS);
             }
         }
     }
