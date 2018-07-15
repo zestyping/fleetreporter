@@ -16,6 +16,8 @@ import android.net.Uri;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
+import android.telephony.PhoneStateListener;
+import android.telephony.ServiceState;
 import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
 import android.telephony.SubscriptionInfo;
@@ -31,6 +33,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
@@ -263,22 +266,24 @@ public class Utils {
     }
 
     /** Sends a text message using the default SmsManager. */
-    public void sendSms(String recipient, String body) {
-        sendSms(recipient, body, null);
+    public void sendSms(int slot, String recipient, String body) {
+        sendSms(slot, recipient, body, null);
     }
 
     /** Sends a text message using the default SmsManager. */
-    public void sendSms(String recipient, String body, Intent sentBroadcastIntent) {
+    public void sendSms(int slot, String recipient, String body, Intent sentBroadcastIntent) {
         PendingIntent sentIntent = sentBroadcastIntent == null ? null :
             PendingIntent.getBroadcast(context, 0, sentBroadcastIntent, PendingIntent.FLAG_ONE_SHOT);
-        getSmsManager().sendTextMessage(recipient, null, body, sentIntent, null);
+        Log.i("Utils", "Sending SMS on slot " + slot + " to " + recipient + ": " + body);
+        getSmsManager(slot).sendTextMessage(recipient, null, body, sentIntent, null);
     }
 
-    /** Gets the GSM subscriber ID for a given SIM slot number (0, 1, etc.). */
-    public String getSubscriberId(int slot) {
+    /** Gets the IMSI for a given SIM slot; returns null if no such slot. */
+    public String getImsi(int slot) {
         if (android.os.Build.VERSION.SDK_INT >= 22) {
-            SubscriptionInfo sub = SubscriptionManager.from(
-                context).getActiveSubscriptionInfoForSimSlotIndex(slot);
+            SubscriptionInfo sub = SubscriptionManager.from(context)
+                .getActiveSubscriptionInfoForSimSlotIndex(slot);
+            if (sub == null) return null;
             try {
                 // The TelephonyManager.getSubscriberId(int) method is public but hidden.
                 Class cls = Class.forName("android.telephony.TelephonyManager");
@@ -287,41 +292,45 @@ public class Utils {
                 return (String) result;
             } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
                 Log.e("Utils", "Failed to look up subscriber ID for slot " + slot, e);
+                return null;
             }
         }
-        return getTelephonyManager().getSubscriberId();
+        return slot == 0 ? getTelephonyManager().getSubscriberId() : null;
     }
 
-    /** Gets the mobile number from which this device sends text messages. */
-    public String getSmsNumber() {
+    /** Gets the mobile number for a given SIM slot; can fail and return null. */
+    public String getMobileNumber(int slot) {
         String number = null;
         if (android.os.Build.VERSION.SDK_INT >= 22) {
-            int subscriptionId = getSmsManager().getSubscriptionId();
-            SubscriptionInfo sub = SubscriptionManager.from(
-                context).getActiveSubscriptionInfo(subscriptionId);
+            SubscriptionInfo sub = SubscriptionManager.from(context)
+                .getActiveSubscriptionInfoForSimSlotIndex(slot);
             if (sub != null) number = sub.getNumber();
         }
-        if (number == null) {
+        if (number == null && slot == 0) {
             number = getTelephonyManager().getLine1Number();
         }
-        if (number == null) return null;
-        return "+" + number.replaceAll("^\\+*", "");
+        return number != null ? "+" + number.replaceAll("^\\+*", "") : null;
     }
 
-    /** Gets the appropriate SmsManager to use for sending text messages.
-     From PataBasi by Kristen Tonga. */
-    public SmsManager getSmsManager() {
+    public int getNumSimSlots() {
+        int slots = 0;
+        while (getSmsManager(slots) != null) slots++;
+        return slots;
+    }
+
+    /** Gets the SmsManager for a given SIM slot; returns null if no such slot. */
+    public SmsManager getSmsManager(int slot) {
         if (android.os.Build.VERSION.SDK_INT >= 22) {
-            int subscriptionId = SmsManager.getDefaultSmsSubscriptionId();
-            if (subscriptionId == SubscriptionManager
-                .INVALID_SUBSCRIPTION_ID) {  // dual-SIM phone
-                subscriptionId = SubscriptionManager.from(context)
-                    .getActiveSubscriptionInfoForSimSlotIndex(0)
-                    .getSubscriptionId();
+            SubscriptionInfo sub = SubscriptionManager.from(context)
+                .getActiveSubscriptionInfoForSimSlotIndex(slot);
+            if (sub != null) {
+                int subscriptionId = sub.getSubscriptionId();
+                if (subscriptionId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    return SmsManager.getSmsManagerForSubscriptionId(subscriptionId);
+                }
             }
-            return SmsManager.getSmsManagerForSubscriptionId(subscriptionId);
         }
-        return SmsManager.getDefault();
+        return slot == 0 ? SmsManager.getDefault() : null;
     }
 
     public SharedPreferences getPrefs() {

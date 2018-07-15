@@ -21,10 +21,9 @@ import android.util.Log;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -53,7 +52,7 @@ import java.util.regex.Pattern;
         v
     mOutbox (the queue of all points yet to be sent by SMS)
         |
-        |   transmitMessages() (~ once every TRANSMISSION_INTERVAL_MILLIS)
+        |   transmitPoints() (~ once every TRANSMISSION_INTERVAL_MILLIS)
         |       TRANSMISSION_INTERVAL_MILLIS should be long enough to receive an
         |       SMS delivery acknowledgement before attempting to retransmit,
         |       and shorter than MotionListener.SETTLING_PERIOD_MILLIS to ensure
@@ -77,6 +76,7 @@ public class LocationService extends BaseService implements PointListener {
     static final String ACTION_SERVICE_CHANGED = "FLEET_REPORTER_SERVICE_CHANGED";
     static final String ACTION_SMS_SENT = "FLEET_REPORTER_SMS_SENT";
     static final String EXTRA_SENT_KEYS = "sent_keys";
+    static final String EXTRA_SLOT = "slot";
 
     // TODO(ping): These constants all depend on the mobile network provider.
     static final long CREDIT_LOW_THRESHOLD = 10;  // when balance falls this low, buy more
@@ -111,9 +111,12 @@ public class LocationService extends BaseService implements PointListener {
 
     private String mLastReporterId;
     private Point mLastRecordedPoint;
-    private long mLastTransmissionAttemptMillis = 0;
+    private int mNumSimSlots;
+    private long[] mLastFailedTransmissionMillis;
+    private long[] mNextTransmissionAttemptMillis;
     private Long mLastSmsSentMillis = null;
     private Long mSmsFailingSinceMillis = null;
+    private int mNextSimSlot = 0;
     private SortedMap<Long, Point> mOutbox = new TreeMap<>(new Comparator<Long>() {
         @Override public int compare(Long a, Long b) {  // sort in descending order
             return b > a ? 1 : b < a ? -1 : 0;
@@ -126,7 +129,7 @@ public class LocationService extends BaseService implements PointListener {
         mRunnable = new Runnable() {
             public void run() {
                 checkWhetherToRecordPoint();
-                checkWhetherToTransmitMessages();
+                checkWhetherToTransmitPoints();
                 checkWhetherToPurchaseCredit(0);
                 mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
             }
@@ -142,6 +145,9 @@ public class LocationService extends BaseService implements PointListener {
                 updateNotification();
             }
         };
+        mNumSimSlots = u.getNumSimSlots();
+        mLastFailedTransmissionMillis = new long[mNumSimSlots];
+        mNextTransmissionAttemptMillis = new long[mNumSimSlots];
     }
 
     /** Starts running the service. */
@@ -308,7 +314,7 @@ public class LocationService extends BaseService implements PointListener {
             // If registration has changed, we should restart the recording clock.
             mLastReporterId = reporterId;
             mLastRecordedPoint = null;
-            mLastTransmissionAttemptMillis = 0;
+            mNextTransmissionAttemptMillis = new long[mNumSimSlots];
             mLastSmsSentMillis = null;
         }
         if (Utils.isLocalTimeOfDayBetween(u.getPref(Prefs.SLEEP_START), u.getPref(Prefs.SLEEP_END))) {
@@ -344,7 +350,7 @@ public class LocationService extends BaseService implements PointListener {
         mLastRecordedPoint = point;
         Log.i(TAG, "recordPoint: " + point + " (" + mOutbox.size() + " queued)");
         limitOutboxSize();
-        checkWhetherToTransmitMessages();
+        checkWhetherToTransmitPoints();
         updateNotification();
 
         // Show the point in the app's text box.
@@ -352,16 +358,16 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     /** Transmits points in the outbox, if it's not too soon to do so. */
-    private void checkWhetherToTransmitMessages() {
-        if (mOutbox.size() > 0 &&
-            getGpsTimeMillis() >= mLastTransmissionAttemptMillis + TRANSMISSION_INTERVAL_MILLIS) {
-            mLastTransmissionAttemptMillis = getGpsTimeMillis();
-            transmitMessages();
+    private void checkWhetherToTransmitPoints() {
+        long now = getGpsTimeMillis();
+        if (mOutbox.size() > 0 && now >= mNextTransmissionAttemptMillis[mNextSimSlot]) {
+            Arrays.fill(mNextTransmissionAttemptMillis, now + TRANSMISSION_INTERVAL_MILLIS);
+            transmitPoints(mNextSimSlot);
         }
     }
 
     /** Transmits some of the pending points in the outbox over SMS. */
-    private void transmitMessages() {
+    private void transmitPoints(int slot) {
         String destination = u.getPref(Prefs.DESTINATION_NUMBER);
         if (destination == null) return;
         String message = "";
@@ -371,17 +377,17 @@ public class LocationService extends BaseService implements PointListener {
             sentKeys.add(key);
             if (sentKeys.size() >= POINTS_PER_SMS_MESSAGE) break;
         }
-        Log.i(TAG, "transmitMessages: " + mOutbox.size() + " in queue; " +
+        Log.i(TAG, "transmitPoints: " + mOutbox.size() + " in queue; " +
                    "sending " + TextUtils.join(", ", sentKeys));
-        Log.i(TAG, "SMS to " + destination + ": " + message);
-        u.sendSms(destination, message.trim(), new Intent(ACTION_SMS_SENT).putExtra(
-            EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys)
-        ));
+        u.sendSms(slot, destination, message.trim(), new Intent(ACTION_SMS_SENT)
+            .putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys))
+            .putExtra(EXTRA_SLOT, slot)
+        );
+        adjustBalance(u.getImsi(slot), -1, null);
 
-        // TODO(ping): Handle SIM slot selection.
-        int slot = 0;
-        String subscriberId = u.getSubscriberId(slot);
-        adjustBalance(subscriberId, -1, null);
+        // Next time, try a different slot.  If a text is successfully dispatched,
+        // SmsStatusReceiver will reset mNextSimSlot to 0.
+        mNextSimSlot = (slot + 1) % mNumSimSlots;
     }
 
     private void checkWhetherToPurchaseCredit(int slot) {
@@ -393,7 +399,7 @@ public class LocationService extends BaseService implements PointListener {
             mLastBalanceCheckMillis = getGpsTimeMillis();
             u.sendUssd(slot, CREDIT_BALANCE_CHECK_USSD_CODE);
         }
-        String subscriberId = u.getSubscriberId(slot);
+        String subscriberId = u.getImsi(slot);
         Long amount = getBalanceAmount(getBalance(subscriberId));
         Log.i(TAG, "Subscriber " + subscriberId + " balance is: " + amount);
         if (amount != null && amount < CREDIT_LOW_THRESHOLD) {
@@ -465,27 +471,42 @@ public class LocationService extends BaseService implements PointListener {
 
     class SmsStatusReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            if (getResultCode() == Activity.RESULT_OK &&
-                intent.hasExtra(EXTRA_SENT_KEYS)) {  // confirmation that SMS was sent
-                for (long key : intent.getLongArrayExtra(EXTRA_SENT_KEYS)) {
-                    Log.i(TAG, "sent " + key + "; removing from outbox");
-                    mOutbox.remove(key);
-                    mLastSmsSentMillis = getGpsTimeMillis();
-                    mSmsFailingSinceMillis = null;
+            if (intent.hasExtra(EXTRA_SENT_KEYS) && intent.hasExtra(EXTRA_SLOT)) {
+                // This is the status of an SMS that transmitPoints() sent.
+                long[] keys = intent.getLongArrayExtra(EXTRA_SENT_KEYS);
+                int slot = intent.getIntExtra(EXTRA_SLOT, 0);
+                long now = getGpsTimeMillis();
+                if (getResultCode() == Activity.RESULT_OK) {
+                    for (long key : keys) {
+                        Log.i(TAG, "Sent " + key + " on slot " + slot + "; removing from outbox");
+                        mOutbox.remove(key);
+                        mLastSmsSentMillis = now;
+                        mSmsFailingSinceMillis = null;
+                        mNextSimSlot = 0;
+                    }
+                    updateNotification();
+                } else {
+                    if (mSmsFailingSinceMillis == null) {
+                        mSmsFailingSinceMillis = now;
+                    }
+                    Log.i(TAG, "Failed to send SMS message on slot " + slot + "");
+                    mLastFailedTransmissionMillis[slot] = now;
+                    mNextSimSlot = (slot + 1) % mNumSimSlots;
+                    if (now > mLastFailedTransmissionMillis[mNextSimSlot] + TRANSMISSION_INTERVAL_MILLIS) {
+                        mNextTransmissionAttemptMillis[mNextSimSlot] = now;
+                        Log.i(TAG, "Trying again on slot " + mNextSimSlot + " immediately");
+                        checkWhetherToTransmitPoints();
+                    } else {
+                        Log.i(TAG, "Trying again on slot " + mNextSimSlot + " eventually");
+                    }
                 }
-                updateNotification();
-            } else {
-                if (mSmsFailingSinceMillis == null) {
-                    mSmsFailingSinceMillis = getGpsTimeMillis();
-                }
-                Log.i(TAG, "failed to send SMS message");
             }
         }
     }
 
     class UssdReplyReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            String subscriberId = u.getSubscriberId(0);
+            String subscriberId = u.getImsi(0);
             String message = intent.getStringExtra(UssdDialogReaderService.EXTRA_USSD_MESSAGE);
             Matcher matcher = CREDIT_BALANCE_CHECK_PATTERN.matcher(message);
             long expirationMillis = getGpsTimeMillis() + CREDIT_BALANCE_DEFAULT_TTL_MILLIS;

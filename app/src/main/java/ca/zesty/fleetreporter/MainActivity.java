@@ -15,6 +15,7 @@ import android.os.IBinder;
 import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.telephony.SmsMessage;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -247,7 +248,7 @@ public class MainActivity extends BaseActivity {
                 public void run(String mobileNumber) {
                     if (mobileNumber == null) return;
                     mLastDestinationNumber = mobileNumber;
-                    u.sendSms(mobileNumber, "fleet register");
+                    u.sendSms(0, mobileNumber, "fleet register");
                 }
             }
         );
@@ -340,6 +341,7 @@ public class MainActivity extends BaseActivity {
 
             String sender = sms.getDisplayOriginatingAddress();
             String body = sms.getMessageBody();
+            Log.i(TAG, "Received SMS from " + sender + ": " + body);
 
             Matcher matcher = PATTERN_ASSIGN.matcher(body);
             if (matcher.matches()) {
@@ -356,7 +358,10 @@ public class MainActivity extends BaseActivity {
             u.setPref(Prefs.DESTINATION_NUMBER, receiverNumber);
             u.setPref(Prefs.REPORTER_ID, reporterId);
             u.setPref(Prefs.REPORTER_LABEL, label);
-            u.sendSms(receiverNumber, "fleet activate " + reporterId);
+            u.sendSms(0, receiverNumber, "fleet activate " + reporterId);
+            if (u.getSmsManager(1) != null) {
+                u.sendSms(1, receiverNumber, "fleet activate " + reporterId);
+            }
             startLocationService();
         }
     }
