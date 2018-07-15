@@ -157,11 +157,14 @@ public class Utils {
     }
 
     public static int countMinutesFromMidnight(String hourMinute) {
-        String[] parts = hourMinute.split(":");
-        if (parts.length < 2) return 0;
-        int hours = Integer.parseInt(parts[0]);
-        int minutes = Integer.parseInt(parts[1]);
-        return hours * 60 + minutes;
+        try {
+            String[] parts = hourMinute.split(":");
+            int hours = Integer.parseInt(parts[0]);
+            int minutes = Integer.parseInt(parts[1]);
+            return hours*60 + minutes;
+        } catch (NullPointerException | IndexOutOfBoundsException | NumberFormatException e) {
+            return 0;
+        }
     }
 
     public static boolean isLocalTimeOfDayBetween(String startHourMinute, String endHourMinute) {
@@ -259,8 +262,10 @@ public class Utils {
         } catch (Settings.SettingNotFoundException e) {
             return false;
         }
-        for (String name : serviceNames.split(":")) {
-            if (name.equals(expectedServiceName)) return true;
+        if (serviceNames != null) {
+            for (String name : serviceNames.split(":")) {
+                if (name.equals(expectedServiceName)) return true;
+            }
         }
         return false;
     }

@@ -532,7 +532,7 @@ public class LocationService extends BaseService implements PointListener {
 
     class NmeaListener implements GpsStatus.NmeaListener {
         public void onNmeaReceived(long timestamp, String nmeaMessage) {
-            if (nmeaMessage.contains("GSA")) {
+            if (nmeaMessage != null && nmeaMessage.contains("GSA")) {
                 if (nmeaMessage.split(",")[2].equals("1")) {  // GPS signal lost
                     mLocationAdapter.onGpsSignalLost();
                 }

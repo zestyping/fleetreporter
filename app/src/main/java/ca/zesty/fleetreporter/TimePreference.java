@@ -51,8 +51,13 @@ public class TimePreference extends DialogPreference {
         if (restoreValue) {
             hourMinute = getPersistedString(defaultValue != null ? "" + defaultValue : "00:00");
         }
-        String[] parts = hourMinute.split(":");
-        lastHour = Integer.parseInt(parts[0]);
-        lastMinute = Integer.parseInt(parts[1]);
+        try {
+            String[] parts = hourMinute.split(":");
+            lastHour = Integer.parseInt(parts[0]);
+            lastMinute = Integer.parseInt(parts[1]);
+        } catch (NullPointerException | IndexOutOfBoundsException | NumberFormatException e) {
+            lastHour = 0;
+            lastMinute = 0;
+        }
     }
 }
