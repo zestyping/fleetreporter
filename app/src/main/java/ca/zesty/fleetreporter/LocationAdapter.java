@@ -24,7 +24,7 @@ public class LocationAdapter implements LocationListener {
         // for scheduling all timed actions (see all uses of Utils.getTime()).
         Utils.setTimeOffset(location.getTime() - System.currentTimeMillis());
         double speedKmh = location.getSpeed() * 3.6;  // 1 m/s = 3.6 km/h
-        mTarget.onLocationFix(new LocationFix(
+        mTarget.onFix(new LocationFix(
             location.getTime(),
             location.getLatitude(), location.getLongitude(), location.getAltitude(),
             speedKmh, location.getBearing(), location.getAccuracy()
@@ -42,6 +42,6 @@ public class LocationAdapter implements LocationListener {
     }
 
     public void onGpsSignalLost() {
-        mTarget.onLocationFix(null);
+        mTarget.onFix(null);
     }
 }

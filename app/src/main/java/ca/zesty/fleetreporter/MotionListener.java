@@ -23,6 +23,13 @@ public class MotionListener implements LocationFixListener {
     static final double RESTING_RADIUS = 20.0;  // meters
     static final double GOOD_ENOUGH_ANCHOR_ACCURACY = 10.0;  // meters
 
+    // Accuracy must be better than STABLE_MAX_ACCURACY to settle into a
+    // resting state.  Once resting, the MotionListener will allow a looser
+    // accuracy level if the position remains more tightly confined.
+
+    static final double RESTING_LOOSE_ACCURACY = 100.0;  // meters
+    static final double RESTING_TIGHT_RADIUS = 10.0;  // meters
+
     private final PointListener mTarget;
     private final Getter<Long> mGetSettlingPeriodMillis;
     private boolean isResting = false;  // current state, either "resting" or "moving"
@@ -38,8 +45,12 @@ public class MotionListener implements LocationFixListener {
         mGetSettlingPeriodMillis = getSettlingPeriodMillis;
     }
 
-    @Override public void onLocationFix(LocationFix fix) {
-        Utils.log(TAG, "onLocationFix: " + fix);
+    @Override public void onFix(LocationFix fix) {
+        String description = "" + fix;
+        if (fix != null) description += mAnchor == null ? " (no anchor)" :
+            Utils.format(" (%.1f m from anchor, settled %d s)",
+                fix.distanceTo(mAnchor), (fix.timeMillis - mSettlingStartMillis) / 1000);
+        Utils.log(TAG, "onFix: " + description);
         if (fix == null) {
             emitNullPoint();
             return;
@@ -49,8 +60,8 @@ public class MotionListener implements LocationFixListener {
         // Decide whether we are "settling" (waiting to see if we stay within a
         // small radius around a selected anchor point for a "settling period").
         boolean enteredSettlingPeriod = false;
-        if (isStable(fix)) {
-            if (mAnchor != null && withinRestingRadius(mAnchor, fix)) {
+        if (isStable(fix) || isContinuingToRest(mAnchor, fix)) {
+            if (withinRestingRadius(mAnchor, fix)) {
                 // We're staying near the anchor; leave the anchor there and
                 // keep waiting for our position to settle.
                 enteredSettlingPeriod = true;
@@ -119,7 +130,20 @@ public class MotionListener implements LocationFixListener {
         return fix.speedKmh < STABLE_MAX_SPEED && fix.latLonSd < STABLE_MAX_ACCURACY;
     }
 
+    private boolean isContinuingToRest(LocationFix anchor, LocationFix fix) {
+        // Once resting is established, the resting state can continue with a
+        // looser accuracy bound in exchange for a tighter position bound.
+        // This corner case was added because we observed GPS readings with
+        // very little position change (< 3 m) while the accuracy value slowly
+        // increased from 30 m to 80-90 m, for an entirely stationary reporter.
+        return withinRestingTightRadius(anchor, fix) && fix.latLonSd < RESTING_LOOSE_ACCURACY;
+    }
+
     private boolean withinRestingRadius(LocationFix fix1, LocationFix fix2) {
-        return fix1.distanceTo(fix2) < RESTING_RADIUS;
+        return fix1 != null && fix2 != null && fix1.distanceTo(fix2) < RESTING_RADIUS;
+    }
+
+    private boolean withinRestingTightRadius(LocationFix fix1, LocationFix fix2) {
+        return fix1 != null && fix2 != null && fix1.distanceTo(fix2) < RESTING_TIGHT_RADIUS;
     }
 }

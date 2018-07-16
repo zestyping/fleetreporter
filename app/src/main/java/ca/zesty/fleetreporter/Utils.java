@@ -259,7 +259,14 @@ public class Utils {
             Log.i(tag, message);
         }
         String filename = Utils.format("fleetreporter-%s.txt", timestamp.substring(0, 10));
-        File file = new File(Environment.getExternalStorageDirectory(), filename);
+        File directory;
+        try {
+            directory = Environment.getExternalStorageDirectory();
+        } catch (RuntimeException e) {
+            // Fails during testing because getExternalStorageDirectory() is not mocked.
+            return;
+        }
+        File file = new File(directory, filename);
         try {
             FileWriter writer = new FileWriter(file, true);
             try {

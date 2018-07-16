@@ -49,7 +49,7 @@ public class LocationFix implements Parcelable {
     public String toString() {
         return String.format(
             Locale.US, "%s: (%+.5f, %+.5f, %+.0f m), %.1f km/h brg %.0f, sd=%.0f m",
-            Utils.formatUtcTimeMillis(timeMillis),
+            Utils.formatUtcTimeSeconds(timeMillis),
             latitude, longitude, altitude, speedKmh, bearing, latLonSd
         );
     }

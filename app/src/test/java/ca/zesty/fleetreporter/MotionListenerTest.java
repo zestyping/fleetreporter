@@ -9,9 +9,9 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 
 public class MotionListenerTest implements PointListener {
-    static final long SETTLING_PERIOD_MILLIS = MotionListener.SETTLING_PERIOD_MILLIS;
     static final long SECOND = 1000;  // millis
     static final long MINUTE = 60000;  // millis
+    static final long SETTLING_PERIOD_MILLIS = 120 * SECOND;
     static final long T0 = 1514764800_000L;  // 2018-01-01 00:00:00 UTC
     static final long T1 = T0 + SETTLING_PERIOD_MILLIS - 1;  // just before settling
     static final long T2 = T0 + SETTLING_PERIOD_MILLIS + 1;  // just after settling
@@ -24,7 +24,9 @@ public class MotionListenerTest implements PointListener {
 
     @Before public void setUp() {
         points.clear();
-        ml = new MotionListener(this);
+        ml = new MotionListener(this, new Getter<Long>() {
+            public Long get() { return SETTLING_PERIOD_MILLIS; }
+        });
         simulateFix(L0, T0);
         assertMovingPoint("for the very first fix", L0, T0, T0);
     }
@@ -99,7 +101,7 @@ public class MotionListenerTest implements PointListener {
     }
 
     private void simulateFix(LocationFix fix, long timeMillis) {
-        ml.onLocationFix(fix.withTime(timeMillis));
+        ml.onFix(fix.withTime(timeMillis));
     }
 
     private void assertNoPoints(String situation) {
