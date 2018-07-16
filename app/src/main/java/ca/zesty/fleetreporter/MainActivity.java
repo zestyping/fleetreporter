@@ -328,7 +328,7 @@ public class MainActivity extends BaseActivity {
 
     class AssignmentReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            String receiverNumber = intent.getStringExtra(SmsReceiver.EXTRA_RECEIVER_NUMBER);
+            String receiverNumber = intent.getStringExtra(SmsReceiver.EXTRA_SENDER);
             String reporterId = intent.getStringExtra(SmsReceiver.EXTRA_REPORTER_ID);
             String label = intent.getStringExtra(SmsReceiver.EXTRA_REPORTER_LABEL);
             u.setPref(Prefs.DESTINATION_NUMBER, receiverNumber);

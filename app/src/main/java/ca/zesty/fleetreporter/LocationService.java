@@ -101,6 +101,7 @@ public class LocationService extends BaseService implements PointListener {
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
     private UssdReplyReceiver mUssdReplyReceiver = new UssdReplyReceiver();
     private PointRequestReceiver mPointRequestReceiver = new PointRequestReceiver();
+    private LowCreditReceiver mLowCreditReceiver = new LowCreditReceiver();
     private PowerManager.WakeLock mWakeLock = null;
 
     private LocationAdapter mLocationAdapter = null;
@@ -142,6 +143,7 @@ public class LocationService extends BaseService implements PointListener {
         registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
         registerReceiver(mUssdReplyReceiver, new IntentFilter(UssdDialogReaderService.ACTION_USSD_RECEIVED));
         registerReceiver(mPointRequestReceiver, new IntentFilter(SmsReceiver.ACTION_POINT_REQUESTED));
+        registerReceiver(mLowCreditReceiver, new IntentFilter(SmsReceiver.ACTION_LOW_CREDIT));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
         mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
@@ -193,6 +195,7 @@ public class LocationService extends BaseService implements PointListener {
         unregisterReceiver(mSmsStatusReceiver);
         unregisterReceiver(mUssdReplyReceiver);
         unregisterReceiver(mPointRequestReceiver);
+        unregisterReceiver(mLowCreditReceiver);
         u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
     }
@@ -564,6 +567,16 @@ public class LocationService extends BaseService implements PointListener {
                 Arrays.fill(mNextTransmissionAttemptMillis, 0);
                 checkWhetherToTransmitPoints();
             }
+        }
+    }
+
+    class LowCreditReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            String destination = u.getPref(Prefs.DESTINATION_NUMBER);
+            if (destination == null) return;
+            String amount = intent.getStringExtra(SmsReceiver.EXTRA_AMOUNT);
+            Log.i(TAG, "Forwarding low-credit alert to receiver");
+            u.sendSms(0, destination, "fleet balance main_xaf " + amount);
         }
     }
 
