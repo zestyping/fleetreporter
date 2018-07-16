@@ -77,8 +77,8 @@ public class LocationService extends BaseService implements PointListener {
     static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * MINUTE;
     static final long ALARM_INTERVAL_MILLIS = 10 * SECOND;
     static final long VELOCITY_MIN_INTERVAL_MILLIS = 20 * SECOND;
-    static final long VELOCITY_MAX_INTERVAL_MILLIS = MINUTE;
-    static final int VELOCITY_NUM_SAMPLES = 5;
+    static final long VELOCITY_MAX_INTERVAL_MILLIS = 35 * SECOND;
+    static final int VELOCITY_NUM_SAMPLES = 4;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
     static final String ACTION_POINT_RECEIVED = "FLEET_REPORTER_POINT_RECEIVED";
@@ -142,7 +142,7 @@ public class LocationService extends BaseService implements PointListener {
         }
     });
 
-    private long mLastLogTransmissionMillis = System.currentTimeMillis();
+    private long mLastLogTransmissionMillis = Utils.getTime();
     private int mLastRelaunchCheckMinutes = Utils.getLocalMinutesSinceMidnight();
 
     @Override public void onCreate() {
@@ -192,7 +192,7 @@ public class LocationService extends BaseService implements PointListener {
                 u.getPrefs().registerOnSharedPreferenceChangeListener(mPrefsListener);
 
                 // Activate the GPS receiver.
-                mNoGpsSinceTimeMillis = getGpsTimeMillis();
+                mNoGpsSinceTimeMillis = Utils.getTime();
                 u.getLocationManager().requestLocationUpdates(
                     LocationManager.GPS_PROVIDER, LOCATION_INTERVAL_MILLIS, 0, mLocationAdapter);
                 u.getLocationManager().addNmeaListener(new NmeaListener());
@@ -247,7 +247,7 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     public Long getMillisSinceLastTransition() {
-        return mPoint != null ? getGpsTimeMillis() - mPoint.lastTransitionMillis : null;
+        return mPoint != null ? Utils.getTime() - mPoint.lastTransitionMillis : null;
     }
 
     public double getMetersTravelledSinceStop() {
@@ -279,7 +279,7 @@ public class LocationService extends BaseService implements PointListener {
         if (mLastSmsSentMillis != null) message += Utils.format(
             "Last SMS sent %s.  ", Utils.describeTime(mLastSmsSentMillis));
         int minutes = (int) Math.max(
-            0, Math.ceil((getNextRecordingMillis() - getGpsTimeMillis()) / 60000));
+            0, Math.ceil((getNextRecordingMillis() - Utils.getTime()) / 60000));
         message += minutes == 0 ?
             "Next report in < 1 min." :
             Utils.format("Next report in %d min.", minutes);
@@ -304,7 +304,7 @@ public class LocationService extends BaseService implements PointListener {
         if (point == null) {
             if (mNoGpsSinceTimeMillis == null) {
                 mNoGpsSinceTimeMillis =
-                    mLastFix != null ? mLastFix.timeMillis : getGpsTimeMillis();
+                    mLastFix != null ? mLastFix.timeMillis : Utils.getTime();
             }
             return;
         }
@@ -329,7 +329,7 @@ public class LocationService extends BaseService implements PointListener {
 
         // Keep around some recent points to help us compute average velocity.
         mVelocityPoints.add(point);
-        long now = getGpsTimeMillis();
+        long now = Utils.getTime();
         while (!mVelocityPoints.isEmpty() &&
             mVelocityPoints.get(0).fix.timeMillis < now - VELOCITY_MAX_INTERVAL_MILLIS) {
             mVelocityPoints.remove(0);
@@ -358,7 +358,7 @@ public class LocationService extends BaseService implements PointListener {
         if (mPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
-            if (mPoint.isTransition() || getGpsTimeMillis() >= getNextRecordingMillis()) {
+            if (mPoint.isTransition() || Utils.getTime() >= getNextRecordingMillis()) {
                 if (Utils.isLocalTimeOfDayBetween(u.getPref(Prefs.SLEEP_START), u.getPref(Prefs.SLEEP_END))) {
                     Utils.log(TAG, "Current time is within sleep period; not recording");
                     return;
@@ -374,7 +374,7 @@ public class LocationService extends BaseService implements PointListener {
         // We want pref_recording_interval to be the maximum interval
         // between fix times, so schedule the next time based on the time
         // elapsed after the fix time, not after when the point was sent.
-        if (mLastRecordedPoint == null) return getGpsTimeMillis();
+        if (mLastRecordedPoint == null) return Utils.getTime();
         return mLastRecordedPoint.fix.timeMillis + (
             mLastRecordedPoint.type == Point.Type.GO ?
                 u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_AFTER_GO, 1) :
@@ -427,7 +427,7 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Transmits points in the outbox, if it's not too soon to do so. */
     private void checkWhetherToTransmitPoints() {
-        long now = getGpsTimeMillis();
+        long now = Utils.getTime();
         if (mOutbox.size() > 0 && now >= mNextTransmissionAttemptMillis[mNextSimSlot]) {
             Arrays.fill(mNextTransmissionAttemptMillis, now + TRANSMISSION_INTERVAL_MILLIS);
             transmitPoints(mNextSimSlot);
@@ -459,7 +459,7 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     private void checkWhetherToPurchaseCredit(int slot) {
-        long now = getGpsTimeMillis();
+        long now = Utils.getTime();
         if (now < mLastCreditCheckMillis + CREDIT_MANAGEMENT_INTERVAL_MILLIS) return;
         mLastCreditCheckMillis = now;
 
@@ -504,7 +504,7 @@ public class LocationService extends BaseService implements PointListener {
     /** Gets the amount from the estimated balance record, returning 0 if expired and null if unknown. */
     private Long getBalanceAmount(BalanceEntity balance) {
         if (balance == null) return null;
-        return getGpsTimeMillis() < balance.expirationMillis ? balance.amount : 0;
+        return Utils.getTime() < balance.expirationMillis ? balance.amount : 0;
     }
 
     /** Sets the estimated balance amount and expiration time, for a given IMSI. */
@@ -536,7 +536,7 @@ public class LocationService extends BaseService implements PointListener {
             long expirationMillis =
                 optExpirationMillis != null ? optExpirationMillis :
                 balance != null ? balance.expirationMillis :
-                getGpsTimeMillis() + SMS_BALANCE_DEFAULT_TTL_MILLIS;
+                Utils.getTime() + SMS_BALANCE_DEFAULT_TTL_MILLIS;
             setBalance(subscriberId, amount + deltaAmount, expirationMillis);
         }
     }
@@ -546,11 +546,6 @@ public class LocationService extends BaseService implements PointListener {
         while (mOutbox.size() > MAX_OUTBOX_SIZE) {
             mOutbox.remove(mOutbox.lastKey());
         }
-    }
-
-    private long getGpsTimeMillis() {
-        return mLocationAdapter == null ?
-            System.currentTimeMillis() : mLocationAdapter.getGpsTimeMillis();
     }
 
     private void checkWhetherToRelaunchApp() {
@@ -571,7 +566,7 @@ public class LocationService extends BaseService implements PointListener {
                 // This is the status of an SMS that transmitPoints() sent.
                 long[] keys = intent.getLongArrayExtra(EXTRA_SENT_KEYS);
                 int slot = intent.getIntExtra(EXTRA_SLOT, 0);
-                long now = getGpsTimeMillis();
+                long now = Utils.getTime();
                 if (getResultCode() == Activity.RESULT_OK) {
                     for (long key : keys) {
                         Utils.log(TAG, "Sent %d on slot %d; removing from outbox", key, slot);
@@ -606,7 +601,7 @@ public class LocationService extends BaseService implements PointListener {
             String message = intent.getStringExtra(UssdReceiverService.EXTRA_USSD_MESSAGE);
 
             Matcher matcher = SMS_BALANCE_CHECK_PATTERN.matcher(message);
-            long now = getGpsTimeMillis();
+            long now = Utils.getTime();
             long expirationMillis = now + SMS_BALANCE_DEFAULT_TTL_MILLIS;
             if (matcher.find()) {
                 long amount = Long.parseLong(matcher.group(1));

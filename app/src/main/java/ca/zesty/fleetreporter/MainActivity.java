@@ -285,7 +285,7 @@ public class MainActivity extends BaseActivity {
 
     public static void postLogMessage(Context context, String message) {
         context.sendBroadcast(new Intent(ACTION_LOG_MESSAGE).putExtra(EXTRA_LOG_MESSAGE,
-            Utils.formatUtcTimeSeconds(System.currentTimeMillis()) + " - " + message
+            Utils.formatUtcTimeSeconds(Utils.getTime()) + " - " + message
         ));
     }
 

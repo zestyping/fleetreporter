@@ -12,7 +12,6 @@ import android.os.Bundle;
 public class LocationAdapter implements LocationListener {
     private final LocationFixListener mTarget;
     private LocationFix mLastFix = null;
-    private long mGpsTimeOffsetMillis = 0;
 
     public LocationAdapter(LocationFixListener target) {
         mTarget = target;
@@ -22,8 +21,8 @@ public class LocationAdapter implements LocationListener {
         // The phone's clock could be inaccurate.  Whenever we get a Location,
         // we can estimate the offset between the phone's clock and GPS time,
         // and this allows us to use estimated GPS time for all stored times and
-        // for scheduling all timed actions (see all uses of getGpsTimeMillis()).
-        mGpsTimeOffsetMillis = location.getTime() - System.currentTimeMillis();
+        // for scheduling all timed actions (see all uses of Utils.getTime()).
+        Utils.setTimeOffset(location.getTime() - System.currentTimeMillis());
         double speedKmh = location.getSpeed() * 3.6;  // 1 m/s = 3.6 km/h
         mTarget.onLocationFix(new LocationFix(
             location.getTime(),
@@ -44,9 +43,5 @@ public class LocationAdapter implements LocationListener {
 
     public void onGpsSignalLost() {
         mTarget.onLocationFix(null);
-    }
-
-    public long getGpsTimeMillis() {
-        return System.currentTimeMillis() + mGpsTimeOffsetMillis;
     }
 }

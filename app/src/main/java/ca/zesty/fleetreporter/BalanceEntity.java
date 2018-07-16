@@ -23,7 +23,7 @@ public class BalanceEntity {
 
     public String toString() {
         final float HOUR_MILLIS = 60 * 60 * 1000;
-        long ttlMillis = expirationMillis - System.currentTimeMillis();
+        long ttlMillis = expirationMillis - Utils.getTime();
         return String.format(
             Locale.US,
             "<Balance %d, expiring in %.1f h, for subscriber %s>",

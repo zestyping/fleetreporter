@@ -15,6 +15,7 @@ import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.telephony.SmsManager;
@@ -64,6 +65,15 @@ public class Utils {
         "(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})Z");
 
     static int sNumLogRemoteLines = 0;
+    static long sTimeOffsetMillis = 0;  // compensate for an inaccurate system clock
+
+    public static void setTimeOffset(long offsetMillis) {
+        sTimeOffsetMillis = offsetMillis;
+    }
+
+    public static long getTime() {
+        return System.currentTimeMillis() + sTimeOffsetMillis;
+    }
 
     /** Calls String.format with the US locale. */
     public static String format(String template, Object... args) {
@@ -153,7 +163,7 @@ public class Utils {
 
     /** Describes a time in the past using a short phrase like "15 h ago". */
     public static String describeTime(long timeMillis) {
-        long elapsedMillis = System.currentTimeMillis() - timeMillis;
+        long elapsedMillis = Utils.getTime() - timeMillis;
         if (elapsedMillis < 60000) return "just now";
         else return describePeriod(elapsedMillis) + " ago";
     }
@@ -237,14 +247,16 @@ public class Utils {
     }
 
     private static void logHelper(String tag, String message, boolean remote) {
-        Log.i(tag, message);
-        String timestamp = Utils.formatUtcTimeSeconds(System.currentTimeMillis());
+        String timestamp = Utils.formatUtcTimeSeconds(Utils.getTime());
         String logLine = Utils.format("%s - %s: %s", timestamp, tag, message);
         if (remote) {
+            Log.i(tag, "(logged to remote) " + message);
             Crashlytics.log(logLine);
             if (++sNumLogRemoteLines >= 100) {
                 Utils.transmitLog();
             }
+        } else {
+            Log.i(tag, message);
         }
         String filename = Utils.format("fleetreporter-%s.txt", timestamp.substring(0, 10));
         File file = new File(Environment.getExternalStorageDirectory(), filename);
@@ -329,7 +341,7 @@ public class Utils {
         Utils.logRemote(TAG, "Relaunch");
         Utils.transmitLog();
         Intent intent = new Intent(context, MainActivity.class);
-        getAlarmManager().set(AlarmManager.RTC, System.currentTimeMillis() + 300,
+        getAlarmManager().set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 300,
             PendingIntent.getActivity(context, 1, intent, PendingIntent.FLAG_CANCEL_CURRENT));
         System.exit(0);
     }
