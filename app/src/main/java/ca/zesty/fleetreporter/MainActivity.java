@@ -14,17 +14,12 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
-import android.telephony.SmsMessage;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
 
 import com.crashlytics.android.Crashlytics;
-
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import io.fabric.sdk.android.Fabric;
 
@@ -40,7 +35,7 @@ public class MainActivity extends BaseActivity {
     private PointReceiver mPointReceiver = new PointReceiver();
     private LogMessageReceiver mLogMessageReceiver = new LogMessageReceiver();
     private ServiceChangedReceiver mServiceChangedReceiver = new ServiceChangedReceiver();
-    private SmsReceiver mSmsReceiver = new SmsReceiver();
+    private AssignmentReceiver mAssignmentReceiver = new AssignmentReceiver();
     private String mLastDestinationNumber = "";
     private Handler mHandler = null;
     private Runnable mRunnable = null;
@@ -86,7 +81,7 @@ public class MainActivity extends BaseActivity {
         registerReceiver(mLogMessageReceiver, new IntentFilter(ACTION_LOG_MESSAGE));
         registerReceiver(mPointReceiver, new IntentFilter(LocationService.ACTION_POINT_RECEIVED));
         registerReceiver(mServiceChangedReceiver, new IntentFilter(LocationService.ACTION_SERVICE_CHANGED));
-        registerReceiver(mSmsReceiver, new IntentFilter(ACTION_SMS_RECEIVED));
+        registerReceiver(mAssignmentReceiver, new IntentFilter(SmsReceiver.ACTION_REPORTER_ASSIGNED));
 
         // Some elements of the display show elapsed time, so we need to
         // periodically update the display even if there are no new events.
@@ -126,7 +121,7 @@ public class MainActivity extends BaseActivity {
         unregisterReceiver(mLogMessageReceiver);
         unregisterReceiver(mPointReceiver);
         unregisterReceiver(mServiceChangedReceiver);
-        unregisterReceiver(mSmsReceiver);
+        unregisterReceiver(mAssignmentReceiver);
         super.onDestroy();
     }
 
@@ -331,30 +326,11 @@ public class MainActivity extends BaseActivity {
         }
     }
 
-    class SmsReceiver extends BroadcastReceiver {
+    class AssignmentReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            final Pattern PATTERN_ASSIGN = Pattern.compile(
-                "^fleet assign ([0-9a-zA-Z]+) +(.*)");
-
-            SmsMessage sms = Utils.getSmsFromIntent(intent);
-            if (sms == null) return;
-
-            String sender = sms.getDisplayOriginatingAddress();
-            String body = sms.getMessageBody();
-            Log.i(TAG, "Received SMS from " + sender + ": " + body);
-
-            Matcher matcher = PATTERN_ASSIGN.matcher(body);
-            if (matcher.matches()) {
-                abortBroadcast();
-                assignReporter(sender, matcher.group(1), matcher.group(2));
-            }
-
-            if (body.trim().startsWith("crash test dummy")) {
-                throw new RuntimeException("crash test dummy");
-            }
-        }
-
-        private void assignReporter(String receiverNumber, String reporterId, String label) {
+            String receiverNumber = intent.getStringExtra(SmsReceiver.EXTRA_RECEIVER_NUMBER);
+            String reporterId = intent.getStringExtra(SmsReceiver.EXTRA_REPORTER_ID);
+            String label = intent.getStringExtra(SmsReceiver.EXTRA_REPORTER_LABEL);
             u.setPref(Prefs.DESTINATION_NUMBER, receiverNumber);
             u.setPref(Prefs.REPORTER_ID, reporterId);
             u.setPref(Prefs.REPORTER_LABEL, label);

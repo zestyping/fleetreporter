@@ -100,6 +100,7 @@ public class LocationService extends BaseService implements PointListener {
     private Runnable mRunnable = null;
     private SmsStatusReceiver mSmsStatusReceiver = new SmsStatusReceiver();
     private UssdReplyReceiver mUssdReplyReceiver = new UssdReplyReceiver();
+    private PointRequestReceiver mPointRequestReceiver = new PointRequestReceiver();
     private PowerManager.WakeLock mWakeLock = null;
 
     private LocationAdapter mLocationAdapter = null;
@@ -140,6 +141,7 @@ public class LocationService extends BaseService implements PointListener {
         };
         registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
         registerReceiver(mUssdReplyReceiver, new IntentFilter(UssdDialogReaderService.ACTION_USSD_RECEIVED));
+        registerReceiver(mPointRequestReceiver, new IntentFilter(SmsReceiver.ACTION_POINT_REQUESTED));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
         mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
@@ -190,6 +192,7 @@ public class LocationService extends BaseService implements PointListener {
         isRunning = false;
         unregisterReceiver(mSmsStatusReceiver);
         unregisterReceiver(mUssdReplyReceiver);
+        unregisterReceiver(mPointRequestReceiver);
         u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
     }
@@ -540,6 +543,26 @@ public class LocationService extends BaseService implements PointListener {
             } else if (CREDIT_PURCHASE_COMPLETED_PATTERN.matcher(message).find()) {
                 mLastSmsPurchaseMillis = now;
                 adjustBalance(subscriberId, CREDIT_PURCHASE_SMS_COUNT, now + CREDIT_PURCHASE_TTL_MILLIS);
+            }
+        }
+    }
+
+    class PointRequestReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            Log.i(TAG, "Received request for current point: " + mPoint);
+            if (mPoint == null) {
+                if (mLastRecordedPoint != null) {
+                    Log.i(TAG, "Resending last recorded point: " + mLastRecordedPoint);
+                    mPoint = mLastRecordedPoint;
+                } else {
+                    Log.i(TAG, "No last recorded point available to send");
+                }
+            }
+            if (mPoint != null) {
+                recordPoint(mPoint);
+                mPoint = null;
+                Arrays.fill(mNextTransmissionAttemptMillis, 0);
+                checkWhetherToTransmitPoints();
             }
         }
     }
