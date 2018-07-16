@@ -59,6 +59,11 @@ public class LocationFix implements Parcelable {
             this.altitude, this.speedKmh, this.bearing, this.latLonSd);
     }
 
+    public LocationFix withSpeedAndBearing(double speedKmh, double bearing) {
+        return new LocationFix(this.timeMillis, this.latitude, this.longitude,
+            this.altitude, speedKmh, bearing, this.latLonSd);
+    }
+
     private double hav(double theta) {
         double s = Math.sin(theta / 2);
         return s * s;
@@ -76,6 +81,22 @@ public class LocationFix implements Parcelable {
         ));
 
         return MEAN_RADIUS * angularDistance;
+    }
+
+    /** Estimates the bearing at the start of the great circle from this fix to another. */
+    public double bearingTo(LocationFix other) {
+        double lat1 = latitude * RADIANS_PER_DEGREE;
+        double lat2 = other.latitude * RADIANS_PER_DEGREE;
+        double lon1 = longitude * RADIANS_PER_DEGREE;
+        double lon2 = other.longitude * RADIANS_PER_DEGREE;
+        double dlon = lon2 - lon1;
+        double y = Math.sin(dlon) * Math.cos(lat2);
+        double x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dlon);
+        double degrees = Math.atan2(y, x) / RADIANS_PER_DEGREE;
+        while (degrees < 0) degrees += 360;
+        while (degrees >= 360) degrees -= 360;
+        return degrees;
     }
 
     public static Parcelable.Creator CREATOR = new Parcelable.Creator<LocationFix>() {

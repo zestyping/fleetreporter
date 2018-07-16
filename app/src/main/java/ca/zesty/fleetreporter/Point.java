@@ -64,6 +64,10 @@ public class Point implements Parcelable {
         return getSegmentMillis() / 1000;
     }
 
+    public Point withFix(LocationFix fix) {
+        return new Point(fix, this.type, this.lastTransitionMillis);
+    }
+
     /** Formats a point for readability and debugging. */
     public String toString() {
         return String.format(Locale.US, "<%s, %s %d s%s>", fix,

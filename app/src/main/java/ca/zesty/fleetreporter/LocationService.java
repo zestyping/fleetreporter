@@ -16,7 +16,6 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
-import android.util.Log;
 
 import com.crashlytics.android.Crashlytics;
 
@@ -77,6 +76,9 @@ public class LocationService extends BaseService implements PointListener {
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * SECOND;
     static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * MINUTE;
     static final long ALARM_INTERVAL_MILLIS = 10 * SECOND;
+    static final long VELOCITY_MIN_INTERVAL_MILLIS = 20 * SECOND;
+    static final long VELOCITY_MAX_INTERVAL_MILLIS = MINUTE;
+    static final int VELOCITY_NUM_SAMPLES = 5;
     static final int POINTS_PER_SMS_MESSAGE = 2;
     static final int MAX_OUTBOX_SIZE = 48;
     static final String ACTION_POINT_RECEIVED = "FLEET_REPORTER_POINT_RECEIVED";
@@ -114,6 +116,7 @@ public class LocationService extends BaseService implements PointListener {
     private LocationAdapter mLocationAdapter = null;
     private NmeaListener mNmeaListener = null;
     private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
+    private List<Point> mVelocityPoints = new ArrayList<>();  // for calculating average velocity
     private Point mPoint = null;  // non-provisional, null means no GPS
     private LocationFix mLastFix = null;  // possibly provisional, never null after first assigned
     private LocationFix mDistanceAnchor = null;
@@ -324,6 +327,14 @@ public class LocationService extends BaseService implements PointListener {
             mDistanceAnchor = null;
         }
 
+        // Keep around some recent points to help us compute average velocity.
+        mVelocityPoints.add(point);
+        long now = getGpsTimeMillis();
+        while (!mVelocityPoints.isEmpty() &&
+            mVelocityPoints.get(0).fix.timeMillis < now - VELOCITY_MAX_INTERVAL_MILLIS) {
+            mVelocityPoints.remove(0);
+        }
+
         // Record the point (but don't record provisional points).
         if (!isProvisional) {
             mPoint = point;
@@ -373,6 +384,7 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Records a point in the outbox, to be sent out over SMS. */
     private void recordPoint(Point point) {
+        point = adjustVelocity(point);
         mOutbox.put(point.getSeconds(), point);
         mLastRecordedPoint = point;
         Utils.log(TAG, "recordPoint: %s (%d queued)", point, mOutbox.size());
@@ -382,6 +394,35 @@ public class LocationService extends BaseService implements PointListener {
 
         // Show the point in the app's text box.
         MainActivity.postLogMessage(this, "Recorded:\n    " + point.format());
+    }
+
+    /** Replaces the point's speed and bearing with smoothed values, if possible. */
+    private Point adjustVelocity(Point point) {
+        int n = mVelocityPoints.size();
+        if (n == 0) return point;
+        LocationFix start = getAverageFix(mVelocityPoints.subList(0, Math.min(n, VELOCITY_NUM_SAMPLES)));
+        LocationFix stop = getAverageFix(mVelocityPoints.subList(Math.max(0, n - VELOCITY_NUM_SAMPLES), n));
+        double interval = stop.timeMillis - start.timeMillis;
+        if (interval < VELOCITY_MIN_INTERVAL_MILLIS) return point;
+        Utils.log(TAG, "Computing adjusted velocity: %.1f s from %s to %s", interval / SECOND, start, stop);
+        double distance = start.distanceTo(stop);
+        double speedKmh = (distance/1000.0)/(interval/HOUR);
+        double bearing = start.bearingTo(stop);
+        return point.withFix(point.fix.withSpeedAndBearing(speedKmh, bearing));
+    }
+
+    private LocationFix getAverageFix(List<Point> points) {
+        double totalLat = 0;
+        double totalLon = 0;
+        long totalMillis = 0;
+        int n = 0;
+        for (Point point : points) {
+            totalLat += point.fix.latitude;
+            totalLon += point.fix.longitude;
+            totalMillis += point.fix.timeMillis;
+            n++;
+        }
+        return new LocationFix(totalMillis / n, totalLat / n, totalLon / n, 0, 0, 0, 0);
     }
 
     /** Transmits points in the outbox, if it's not too soon to do so. */
