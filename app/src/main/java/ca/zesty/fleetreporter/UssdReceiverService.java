@@ -3,12 +3,11 @@ package ca.zesty.fleetreporter;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Intent;
-import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
-public class UssdDialogReaderService extends AccessibilityService {
-    static final String TAG = "UssdDialogReaderService";
+public class UssdReceiverService extends AccessibilityService {
+    static final String TAG = "UssdReceiverService";
     static final String ACTION_USSD_RECEIVED = "FLEET_REPORTER_USSD_RECEIVED";
     static final String EXTRA_USSD_MESSAGE = "ussd_message";
 
@@ -51,9 +50,17 @@ public class UssdDialogReaderService extends AccessibilityService {
     private void dismissDialog(AccessibilityNodeInfo node) {
         String nodeClass = String.valueOf(node.getClassName());
         if (nodeClass.endsWith(".FrameLayout")) {
-            // The last two children are the "Cancel" and "Send" buttons.
-            AccessibilityNodeInfo cancelButton = node.getChild(node.getChildCount() - 2);
-            cancelButton.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            // If this is a text entry popup, there will be two buttons,
+            // "Cancel" and "Send".  If this is a plain message popup, there
+            // will just be one button, "OK".  In both cases, we click the
+            // first available button to dismiss the popup.
+            for (int i = 0; i < node.getChildCount(); i++) {
+                AccessibilityNodeInfo child = node.getChild(i);
+                if (child != null && String.valueOf(child.getClassName()).endsWith(".Button")) {
+                    child.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    break;
+                }
+            }
         } else {
             // These methods of closing the dialog don't work on Samsung, but
             // might work on other phones.
@@ -63,7 +70,7 @@ public class UssdDialogReaderService extends AccessibilityService {
     }
 
     private void handleText(String text) {
-        Log.i(TAG, "USSD reply: " + text);
+        Utils.logRemote(TAG, "USSD received: " + text);
         sendBroadcast(new Intent(ACTION_USSD_RECEIVED).putExtra(EXTRA_USSD_MESSAGE, text));
     }
 }

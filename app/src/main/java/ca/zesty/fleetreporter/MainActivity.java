@@ -42,6 +42,7 @@ public class MainActivity extends BaseActivity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Utils.log(TAG, "onCreate");
         Fabric.with(this, new Crashlytics());
         setContentView(R.layout.activity_main);
         setTitle("Fleet Reporter " + BuildConfig.VERSION_NAME);
@@ -55,10 +56,11 @@ public class MainActivity extends BaseActivity {
             Manifest.permission.RECEIVE_BOOT_COMPLETED,
             Manifest.permission.RECEIVE_SMS,
             Manifest.permission.SEND_SMS,
-            Manifest.permission.WAKE_LOCK
+            Manifest.permission.WAKE_LOCK,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
         }, 0);
 
-        if (!u.isAccessibilityServiceEnabled(UssdDialogReaderService.class)) {
+        if (!u.isAccessibilityServiceEnabled(UssdReceiverService.class)) {
             promptUserToEnableAccessibilityService();
         }
 
@@ -136,6 +138,9 @@ public class MainActivity extends BaseActivity {
         }
         if (item.getItemId() == R.id.action_pause) {
             stopLocationService();
+        }
+        if (item.getItemId() == R.id.action_relaunch) {
+            u.relaunchApp();
         }
         if (item.getItemId() == R.id.action_settings) {
             startActivity(new Intent(this, SettingsActivity.class));
@@ -290,9 +295,9 @@ public class MainActivity extends BaseActivity {
             "Automatic purchasing of SMS credit requires a change " +
                 "to your Accessibility settings.  On the next screen, please:\n" +
                 "\n" +
-                "    \u2022 Find \"Fleet Reporter\"\n" +
-                "    \u2022 Enable it\n" +
-                "    \u2022 Use the back button to return here",
+                "  \u2022 Find \"Fleet Reporter\"\n" +
+                "  \u2022 Enable it\n" +
+                "  \u2022 Use the back button to return here",
             "Open Settings",
             new DialogInterface.OnClickListener() {
                 @Override public void onClick(DialogInterface dialog, int which) {

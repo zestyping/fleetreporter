@@ -10,6 +10,7 @@
   <uses-permission android:name="android.permission.RECEIVE_SMS" />
   <uses-permission android:name="android.permission.SEND_SMS" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
   <!-- necessary to read subscriptionId to send SMS on dual SIM -->
   <uses-permission android:name="android.permission.READ_PHONE_STATE" />
@@ -33,7 +34,7 @@
         android:parentActivityName=".MainActivity" />
     <service android:name=".LocationService" />
     <service
-        android:name=".UssdDialogReaderService"
+        android:name=".UssdReceiverService"
         android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
       <intent-filter>
         <action android:name="android.accessibilityservice.AccessibilityService" />

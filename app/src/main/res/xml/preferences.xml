@@ -53,7 +53,12 @@
         android:title="Show message log"
         android:defaultValue="false" />
 
-    <EditTextPreference
+    <ca.zesty.fleetreporter.TimePreference
+        android:key="pref_daily_relaunch_time"
+        android:title="Daily relaunch time"
+        android:summary="Daily time to shut down and relaunch the app" />
+
+      <EditTextPreference
         android:key="pref_destination_number"
         android:title="Destination number"
         android:summary="Do not edit (debugging only)"

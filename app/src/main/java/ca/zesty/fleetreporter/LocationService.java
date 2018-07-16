@@ -18,6 +18,8 @@ import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 import android.util.Log;
 
+import com.crashlytics.android.Crashlytics;
+
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -29,6 +31,8 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import io.fabric.sdk.android.Fabric;
 
 /** A foreground service that records the device's GPS location and periodically
     reports it via SMS to the Fleet Map device.
@@ -82,19 +86,22 @@ public class LocationService extends BaseService implements PointListener {
     static final String EXTRA_SLOT = "slot";
 
     // TODO(ping): These constants all depend on the mobile network provider.
-    static final long CREDIT_LOW_THRESHOLD = 10;  // when balance falls this low, buy more
-    static final long CREDIT_PURCHASE_TTL_MILLIS = 23 * HOUR;  // assume purchased credit expires after this duration
-    static final String CREDIT_PURCHASE_USSD_CODE = "#100*2*1#";  // Orange 250-SMS "Kota Songo" bundle purchase
-    static final Pattern CREDIT_PURCHASE_COMPLETED_PATTERN = Pattern.compile("Votre forfait.*est activ");
-    static final long CREDIT_PURCHASE_SMS_COUNT = 50;  // number of SMS messages purchased in a bundle
-    static final long CREDIT_BALANCE_CHECK_INTERVAL_MILLIS = 10 * MINUTE;  // check balance every 10 minutes
-    static final String CREDIT_BALANCE_CHECK_USSD_CODE = "#100*2*2#";  // Orange 250-SMS "Kota Songo" balance check
-    static final Pattern CREDIT_BALANCE_CHECK_PATTERN = Pattern.compile("Vous disposez .* ([0-9]+) SMS");
-    static final Pattern CREDIT_BALANCE_EMPTY_PATTERN = Pattern.compile("pas de forfait en cours");
-    static final long CREDIT_BALANCE_DEFAULT_TTL_MILLIS = HOUR;  // if no expiration time can be parsed, assume balance expires after this duration
-    static final Pattern CREDIT_BALANCE_EXPIRATION_PATTERN = Pattern.compile("valable jusqu'au (\\d+-\\d+-\\d+ )\\D{0,6}(\\d+:\\d+:\\d+)");
-    static final String CREDIT_BALANCE_EXPIRATION_FORMAT = "$1 $2 +0100";  // format for pattern groups above, to be parsed by parser below
-    static final DateFormat CREDIT_BALANCE_EXPIRATION_PARSER = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss Z");
+    static final long CREDIT_MANAGEMENT_INTERVAL_MILLIS = 2 * MINUTE;
+    static final long SMS_LOW_THRESHOLD = 10;  // when balance falls this low, buy more
+    static final long SMS_PURCHASE_TTL_MILLIS = 23 * HOUR;  // assume purchased credit expires after this duration
+    static final String SMS_PURCHASE_USSD_CODE = "#100*2*1#";  // Orange 250-SMS "Kota Songo" bundle purchase
+    static final Pattern SMS_PURCHASE_COMPLETED_PATTERN = Pattern.compile("Votre forfait.*est activ");
+    static final long SMS_PURCHASE_QUANTITY = 50;  // number of SMS messages purchased in a bundle
+    static final long BALANCE_CHECK_INTERVAL_MILLIS = 30 * MINUTE;  // check balance every 30 minutes
+    static final String SMS_BALANCE_CHECK_USSD_CODE = "#100*2*2#";  // Orange 250-SMS "Kota Songo" balance check
+    static final Pattern SMS_BALANCE_CHECK_PATTERN = Pattern.compile("Vous disposez .* ([0-9]+) SMS");
+    static final Pattern SMS_BALANCE_EMPTY_PATTERN = Pattern.compile("pas de forfait en cours");
+    static final long SMS_BALANCE_DEFAULT_TTL_MILLIS = HOUR;  // if no expiration time can be parsed, assume balance expires after this duration
+    static final Pattern SMS_BALANCE_EXPIRATION_PATTERN = Pattern.compile("valable jusqu'au (\\d+-\\d+-\\d+ )\\D{0,6}(\\d+:\\d+:\\d+)");
+    static final String SMS_BALANCE_EXPIRATION_FORMAT = "$1 $2 +0100";  // format for pattern groups above, to be parsed by parser below
+    static final DateFormat SMS_BALANCE_EXPIRATION_PARSER = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss Z");
+    static final String CFA_BALANCE_CHECK_USSD_CODE = "#111*1*1#";  // Orange main account balance in CFA
+    static final String CFA_SLOT_1_BALANCE_CHECK_USSD_CODE = "*121#";  // Azur main account balance in CFA
 
     private Handler mHandler = null;
     private Runnable mRunnable = null;
@@ -113,7 +120,10 @@ public class LocationService extends BaseService implements PointListener {
     private double mMetersTravelledSinceStop = 0;
     private Long mNoGpsSinceTimeMillis = null;
     private long mLastSmsPurchaseMillis = 0;
-    private long mLastBalanceCheckMillis = 0;
+    private long mLastSmsBalanceCheckMillis = 0;
+    private long mLastCfaBalanceCheckMillis = 0;
+    private long mLastSlot1BalanceCheckMillis = 0;
+    private long mLastCreditCheckMillis = 0;
 
     private String mLastReporterId;
     private Point mLastRecordedPoint;
@@ -129,19 +139,25 @@ public class LocationService extends BaseService implements PointListener {
         }
     });
 
+    private long mLastLogTransmissionMillis = System.currentTimeMillis();
+    private int mLastRelaunchCheckMinutes = Utils.getLocalMinutesSinceMidnight();
+
     @Override public void onCreate() {
         super.onCreate();
+        Utils.log(TAG, "onCreate");
+        Fabric.with(this, new Crashlytics());
         mHandler = new Handler();
         mRunnable = new Runnable() {
             public void run() {
                 checkWhetherToRecordPoint();
                 checkWhetherToTransmitPoints();
                 checkWhetherToPurchaseCredit(0);
+                checkWhetherToRelaunchApp();
                 mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
             }
         };
         registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
-        registerReceiver(mUssdReplyReceiver, new IntentFilter(UssdDialogReaderService.ACTION_USSD_RECEIVED));
+        registerReceiver(mUssdReplyReceiver, new IntentFilter(UssdReceiverService.ACTION_USSD_RECEIVED));
         registerReceiver(mPointRequestReceiver, new IntentFilter(SmsReceiver.ACTION_POINT_REQUESTED));
         registerReceiver(mLowCreditReceiver, new IntentFilter(SmsReceiver.ACTION_LOW_CREDIT));
         mWakeLock = u.getPowerManager().newWakeLock(
@@ -160,11 +176,12 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i(TAG, "onStartCommand: flags = " + flags);
         if (u.getIntPref(Prefs.RUNNING, 0) == 1) {
             // Set an alarm to restart this service, in case it crashes.
             setRestartAlarm();
             if (!isRunning) {
+                Utils.logRemote(TAG, "Startup");
+
                 // Grab the CPU.
                 isRunning = true;
                 mWakeLock.acquire();
@@ -187,6 +204,7 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Cleans up when the service is about to stop. */
     @Override public void onDestroy() {
+        Utils.logRemote(TAG, "onDestroy");
         mHandler.removeCallbacks(mRunnable);
         u.getLocationManager().removeUpdates(mLocationAdapter);
         u.getLocationManager().removeNmeaListener(mNmeaListener);
@@ -201,7 +219,6 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     private void setRestartAlarm() {
-        Log.i(TAG, "setRestartAlarm");
         Intent intent = new Intent(this, LocationService.class);
         PendingIntent pi = PendingIntent.getService(this, 0, intent, 0);
         u.getAlarmManager().cancel(pi);
@@ -278,7 +295,7 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Receives a new Point from the MotionListener. */
     public void onPoint(Point point, boolean isProvisional) {
-        Log.i(TAG, "onPoint" + (isProvisional ? " (provisional): " : ": ") + point);
+        Utils.log(TAG, "onPoint" + (isProvisional ? " (provisional): " : ": ") + point);
 
         // Keep track of how long we haven't had a GPS fix.
         if (point == null) {
@@ -327,14 +344,14 @@ public class LocationService extends BaseService implements PointListener {
             mNextTransmissionAttemptMillis = new long[mNumSimSlots];
             mLastSmsSentMillis = null;
         }
-        if (Utils.isLocalTimeOfDayBetween(u.getPref(Prefs.SLEEP_START), u.getPref(Prefs.SLEEP_END))) {
-            Log.i(TAG, "Current time is within sleep period; not recording");
-            return;
-        }
         if (mPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
             if (mPoint.isTransition() || getGpsTimeMillis() >= getNextRecordingMillis()) {
+                if (Utils.isLocalTimeOfDayBetween(u.getPref(Prefs.SLEEP_START), u.getPref(Prefs.SLEEP_END))) {
+                    Utils.log(TAG, "Current time is within sleep period; not recording");
+                    return;
+                }
                 recordPoint(mPoint);
                 mPoint = null;
             }
@@ -358,7 +375,7 @@ public class LocationService extends BaseService implements PointListener {
     private void recordPoint(Point point) {
         mOutbox.put(point.getSeconds(), point);
         mLastRecordedPoint = point;
-        Log.i(TAG, "recordPoint: " + point + " (" + mOutbox.size() + " queued)");
+        Utils.log(TAG, "recordPoint: %s (%d queued)", point, mOutbox.size());
         limitOutboxSize();
         checkWhetherToTransmitPoints();
         updateNotification();
@@ -387,8 +404,8 @@ public class LocationService extends BaseService implements PointListener {
             sentKeys.add(key);
             if (sentKeys.size() >= POINTS_PER_SMS_MESSAGE) break;
         }
-        Log.i(TAG, "transmitPoints: " + mOutbox.size() + " in queue; " +
-                   "sending " + TextUtils.join(", ", sentKeys));
+        Utils.log(TAG, "transmitPoints: %d in queue; sending %s",
+            mOutbox.size(), TextUtils.join(", ", sentKeys));
         u.sendSms(slot, destination, message.trim(), new Intent(ACTION_SMS_SENT)
             .putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys))
             .putExtra(EXTRA_SLOT, slot)
@@ -401,27 +418,35 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     private void checkWhetherToPurchaseCredit(int slot) {
-        if (!u.isAccessibilityServiceEnabled(UssdDialogReaderService.class)) {
-            Log.w(TAG, "Accessibility service not enabled, skipping credit check");
-            return;
-        }
         long now = getGpsTimeMillis();
-        if (now > mLastBalanceCheckMillis + CREDIT_BALANCE_CHECK_INTERVAL_MILLIS) {
-            mLastBalanceCheckMillis = now;
-            u.sendUssd(slot, CREDIT_BALANCE_CHECK_USSD_CODE);
+        if (now < mLastCreditCheckMillis + CREDIT_MANAGEMENT_INTERVAL_MILLIS) return;
+        mLastCreditCheckMillis = now;
+
+        if (!u.isAccessibilityServiceEnabled(UssdReceiverService.class)) {
+            Utils.logRemote(TAG, "Accessibility service not enabled, skipping credit check");
+            return;
         }
         String subscriberId = u.getImsi(slot);
         Long amount = getBalanceAmount(getBalance(subscriberId));
-        Log.i(TAG, "Subscriber " + subscriberId + " balance is: " + amount);
-        if (amount != null && amount < CREDIT_LOW_THRESHOLD) {
-            long purchaseIntervalMillis = u.getIntPref(Prefs.SMS_PURCHASING_INTERVAL, 60) * HOUR;
+        if (amount != null && amount < SMS_LOW_THRESHOLD) {
+            Utils.logRemote(TAG, "Subscriber %s balance is: %s", subscriberId, amount);
+            long purchaseIntervalMillis = u.getIntPref(Prefs.SMS_PURCHASE_INTERVAL, 60) * MINUTE;
             long waitMillis = mLastSmsPurchaseMillis + purchaseIntervalMillis - now;
             if (waitMillis > 0) {
-                Log.i(TAG, "Must wait " + (waitMillis / MINUTE) + " min before purchasing another SMS package");
+                Utils.logRemote(TAG, "Must wait %d min before purchasing another SMS package", waitMillis / MINUTE);
             } else {
-                Log.i(TAG, "Purchasing an SMS package");
-                u.sendUssd(slot, CREDIT_PURCHASE_USSD_CODE);
+                Utils.logRemote(TAG, "Purchasing an SMS package");
+                u.sendUssd(slot, SMS_PURCHASE_USSD_CODE);
             }
+        } else if (now > mLastSmsBalanceCheckMillis + BALANCE_CHECK_INTERVAL_MILLIS) {
+            mLastSmsBalanceCheckMillis = now;
+            u.sendUssd(slot, SMS_BALANCE_CHECK_USSD_CODE);
+        } else if (now > mLastCfaBalanceCheckMillis + BALANCE_CHECK_INTERVAL_MILLIS) {
+            mLastCfaBalanceCheckMillis = now;
+            u.sendUssd(slot, CFA_BALANCE_CHECK_USSD_CODE);
+        } else if (now > mLastSlot1BalanceCheckMillis + BALANCE_CHECK_INTERVAL_MILLIS) {
+            mLastSlot1BalanceCheckMillis = now;
+            u.sendUssd(1, CFA_SLOT_1_BALANCE_CHECK_USSD_CODE);
         }
     }
 
@@ -449,7 +474,7 @@ public class LocationService extends BaseService implements PointListener {
             if (db.getBalanceDao().update(balance) == 0) {
                 db.getBalanceDao().insert(balance);
             }
-            Log.i(TAG, "Stored " + balance);
+            Utils.log(TAG, "Stored " + balance);
         } finally {
             db.close();
         }
@@ -470,7 +495,7 @@ public class LocationService extends BaseService implements PointListener {
             long expirationMillis =
                 optExpirationMillis != null ? optExpirationMillis :
                 balance != null ? balance.expirationMillis :
-                getGpsTimeMillis() + CREDIT_BALANCE_DEFAULT_TTL_MILLIS;
+                getGpsTimeMillis() + SMS_BALANCE_DEFAULT_TTL_MILLIS;
             setBalance(subscriberId, amount + deltaAmount, expirationMillis);
         }
     }
@@ -487,6 +512,18 @@ public class LocationService extends BaseService implements PointListener {
             System.currentTimeMillis() : mLocationAdapter.getGpsTimeMillis();
     }
 
+    private void checkWhetherToRelaunchApp() {
+        // Relaunch daily at a configurable time (default midnight).
+        String relaunchTime = u.getPref(Prefs.DAILY_RELAUNCH_TIME);
+        int relaunchTimeMinutes = Utils.countMinutesSinceMidnight(relaunchTime);
+        int localMinutes = Utils.getLocalMinutesSinceMidnight();
+        if (mLastRelaunchCheckMinutes != relaunchTimeMinutes && localMinutes == relaunchTimeMinutes) {
+            Utils.logRemote(TAG, "Relaunching app (local time of day is %s)", relaunchTime);
+            u.relaunchApp();
+        }
+        mLastRelaunchCheckMinutes = localMinutes;
+    }
+
     class SmsStatusReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
             if (intent.hasExtra(EXTRA_SENT_KEYS) && intent.hasExtra(EXTRA_SLOT)) {
@@ -496,7 +533,7 @@ public class LocationService extends BaseService implements PointListener {
                 long now = getGpsTimeMillis();
                 if (getResultCode() == Activity.RESULT_OK) {
                     for (long key : keys) {
-                        Log.i(TAG, "Sent " + key + " on slot " + slot + "; removing from outbox");
+                        Utils.log(TAG, "Sent %d on slot %d; removing from outbox", key, slot);
                         mOutbox.remove(key);
                         mLastSmsSentMillis = now;
                         mSmsFailingSinceMillis = null;
@@ -507,15 +544,15 @@ public class LocationService extends BaseService implements PointListener {
                     if (mSmsFailingSinceMillis == null) {
                         mSmsFailingSinceMillis = now;
                     }
-                    Log.i(TAG, "Failed to send SMS message on slot " + slot + "");
+                    Utils.log(TAG, "Failed to send SMS on slot %d", slot);
                     mLastFailedTransmissionMillis[slot] = now;
                     mNextSimSlot = (slot + 1) % mNumSimSlots;
                     if (now > mLastFailedTransmissionMillis[mNextSimSlot] + TRANSMISSION_INTERVAL_MILLIS) {
                         mNextTransmissionAttemptMillis[mNextSimSlot] = now;
-                        Log.i(TAG, "Trying again on slot " + mNextSimSlot + " immediately");
+                        Utils.log(TAG, "Retrying on slot %d immediately", mNextSimSlot);
                         checkWhetherToTransmitPoints();
                     } else {
-                        Log.i(TAG, "Trying again on slot " + mNextSimSlot + " eventually");
+                        Utils.log(TAG, "Retrying on slot %d eventually", mNextSimSlot);
                     }
                 }
             }
@@ -525,40 +562,41 @@ public class LocationService extends BaseService implements PointListener {
     class UssdReplyReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
             String subscriberId = u.getImsi(0);
-            String message = intent.getStringExtra(UssdDialogReaderService.EXTRA_USSD_MESSAGE);
-            Matcher matcher = CREDIT_BALANCE_CHECK_PATTERN.matcher(message);
+            String message = intent.getStringExtra(UssdReceiverService.EXTRA_USSD_MESSAGE);
+
+            Matcher matcher = SMS_BALANCE_CHECK_PATTERN.matcher(message);
             long now = getGpsTimeMillis();
-            long expirationMillis = now + CREDIT_BALANCE_DEFAULT_TTL_MILLIS;
+            long expirationMillis = now + SMS_BALANCE_DEFAULT_TTL_MILLIS;
             if (matcher.find()) {
                 long amount = Long.parseLong(matcher.group(1));
-                matcher = CREDIT_BALANCE_EXPIRATION_PATTERN.matcher(message);
+                matcher = SMS_BALANCE_EXPIRATION_PATTERN.matcher(message);
                 if (matcher.find()) {
                     try {
-                        String expirationStamp = CREDIT_BALANCE_EXPIRATION_PATTERN.matcher(matcher.group()).replaceAll(CREDIT_BALANCE_EXPIRATION_FORMAT);
-                        expirationMillis = CREDIT_BALANCE_EXPIRATION_PARSER.parse(expirationStamp).getTime();
+                        String expirationStamp = SMS_BALANCE_EXPIRATION_PATTERN.matcher(matcher.group()).replaceAll(SMS_BALANCE_EXPIRATION_FORMAT);
+                        expirationMillis = SMS_BALANCE_EXPIRATION_PARSER.parse(expirationStamp).getTime();
                     } catch (ParseException e) {
-                        Log.e(TAG, "Could not parse expiration time from: " + matcher.group());
+                        Utils.logRemote(TAG, "Could not parse expiration time: " + matcher.group());
                     }
                 }
                 setBalance(subscriberId, amount, expirationMillis);
-            } else if (CREDIT_BALANCE_EMPTY_PATTERN.matcher(message).find()) {
+            } else if (SMS_BALANCE_EMPTY_PATTERN.matcher(message).find()) {
                 setBalance(subscriberId, 0, expirationMillis);
-            } else if (CREDIT_PURCHASE_COMPLETED_PATTERN.matcher(message).find()) {
+            } else if (SMS_PURCHASE_COMPLETED_PATTERN.matcher(message).find()) {
                 mLastSmsPurchaseMillis = now;
-                adjustBalance(subscriberId, CREDIT_PURCHASE_SMS_COUNT, now + CREDIT_PURCHASE_TTL_MILLIS);
+                adjustBalance(subscriberId, SMS_PURCHASE_QUANTITY, now + SMS_PURCHASE_TTL_MILLIS);
             }
         }
     }
 
     class PointRequestReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            Log.i(TAG, "Received request for current point: " + mPoint);
+            Utils.log(TAG, "Received request for current point: " + mPoint);
             if (mPoint == null) {
                 if (mLastRecordedPoint != null) {
-                    Log.i(TAG, "Resending last recorded point: " + mLastRecordedPoint);
+                    Utils.log(TAG, "Resending last recorded point: " + mLastRecordedPoint);
                     mPoint = mLastRecordedPoint;
                 } else {
-                    Log.i(TAG, "No last recorded point available to send");
+                    Utils.log(TAG, "No last recorded point available to send");
                 }
             }
             if (mPoint != null) {
@@ -575,7 +613,7 @@ public class LocationService extends BaseService implements PointListener {
             String destination = u.getPref(Prefs.DESTINATION_NUMBER);
             if (destination == null) return;
             String amount = intent.getStringExtra(SmsReceiver.EXTRA_AMOUNT);
-            Log.i(TAG, "Forwarding low-credit alert to receiver");
+            Utils.log(TAG, "Forwarding low-credit alert to receiver");
             u.sendSms(0, destination, "fleet balance main_xaf " + amount);
         }
     }

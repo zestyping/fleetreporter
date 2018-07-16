@@ -1,7 +1,5 @@
 package ca.zesty.fleetreporter;
 
-import android.util.Log;
-
 /** A LocationListener that estimates whether the GPS receiver is resting or
     moving, and converts each received Location to an appropriate Point.
  */
@@ -41,7 +39,7 @@ public class MotionListener implements LocationFixListener {
     }
 
     @Override public void onLocationFix(LocationFix fix) {
-        Log.i(TAG, "onLocationFix: " + fix);
+        Utils.log(TAG, "onLocationFix: " + fix);
         if (fix == null) {
             emitNullPoint();
             return;

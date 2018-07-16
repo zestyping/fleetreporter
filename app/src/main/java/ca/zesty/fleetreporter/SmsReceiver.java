@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.telephony.SmsMessage;
-import android.util.Log;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,9 +18,11 @@ public class SmsReceiver extends BroadcastReceiver {
     static final String EXTRA_SENDER = "sender";
     static final String EXTRA_REPORTER_ID = "reporter_id";
     static final String EXTRA_REPORTER_LABEL = "reporter_label";
+    static final Pattern PATTERN_CREDIT = Pattern.compile("Votre credit est de +(\\d+)");
+    static final String ACTION_CREDIT = "FLEET_RECEIVER_CREDIT";
+    static final String EXTRA_AMOUNT = "amount";
     static final Pattern PATTERN_LOW_CREDIT = Pattern.compile("Votre credit est seulement de +(\\d+)");
     static final String ACTION_LOW_CREDIT = "FLEET_RECEIVER_LOW_CREDIT";
-    static final String EXTRA_AMOUNT = "amount";
 
     @Override public void onReceive(Context context, Intent intent) {
         SmsMessage sms = Utils.getSmsFromIntent(intent);
@@ -29,7 +30,7 @@ public class SmsReceiver extends BroadcastReceiver {
 
         String sender = sms.getDisplayOriginatingAddress();
         String body = sms.getMessageBody().trim();
-        Log.i(TAG, "Received SMS from " + sender + ": " + body);
+        Utils.log(TAG, "Received SMS from %s: %s", sender, body);
 
         if (PATTERN_REQPOINT.matcher(body).find()) {
             context.sendBroadcast(new Intent(ACTION_POINT_REQUESTED));
@@ -46,7 +47,17 @@ public class SmsReceiver extends BroadcastReceiver {
 
         matcher = PATTERN_LOW_CREDIT.matcher(body);
         if (matcher.find()) {
+            Utils.logRemote(TAG, "SMS received: " + body);
             context.sendBroadcast(new Intent(ACTION_LOW_CREDIT)
+                .putExtra(EXTRA_SENDER, sender)
+                .putExtra(EXTRA_AMOUNT, matcher.group(1))
+            );
+        }
+
+        matcher = PATTERN_CREDIT.matcher(body);
+        if (matcher.find()) {
+            Utils.logRemote(TAG, "SMS received: " + body);
+            context.sendBroadcast(new Intent(ACTION_CREDIT)
                 .putExtra(EXTRA_SENDER, sender)
                 .putExtra(EXTRA_AMOUNT, matcher.group(1))
             );
