@@ -172,9 +172,6 @@ public class LocationService extends BaseService implements PointListener {
                 updateNotification();
             }
         };
-        mNumSimSlots = u.getNumSimSlots();
-        mLastFailedTransmissionMillis = new long[mNumSimSlots];
-        mNextTransmissionAttemptMillis = new long[mNumSimSlots];
     }
 
     /** Starts running the service. */
@@ -184,6 +181,9 @@ public class LocationService extends BaseService implements PointListener {
             setRestartAlarm();
             if (!isRunning) {
                 Utils.logRemote(TAG, "Startup");
+                mNumSimSlots = u.getNumSimSlots();
+                mLastFailedTransmissionMillis = new long[mNumSimSlots];
+                mNextTransmissionAttemptMillis = new long[mNumSimSlots];
 
                 // Grab the CPU.
                 isRunning = true;
