@@ -16,12 +16,12 @@
       app:showAsAction="never"/>
 
   <item
-      android:id="@+id/action_relaunch"
-      android:title="Relaunch"
+      android:id="@+id/action_settings"
+      android:title="Settings..."
       app:showAsAction="never"/>
 
   <item
-      android:id="@+id/action_settings"
-      android:title="Settings..."
+      android:id="@+id/action_update"
+      android:title="Update app..."
       app:showAsAction="never"/>
 </menu>

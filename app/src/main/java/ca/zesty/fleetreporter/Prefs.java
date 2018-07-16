@@ -4,6 +4,7 @@ package ca.zesty.fleetreporter;
 public class Prefs {
     static final String DAILY_RELAUNCH_TIME = "pref_daily_relaunch_time";
     static final String DESTINATION_NUMBER = "pref_destination_number";
+    static final String PLAY_STORE_REQUESTED = "pref_play_store_requested";
     static final String RECORDING_INTERVAL = "pref_recording_interval";
     static final String RECORDING_INTERVAL_AFTER_GO = "pref_recording_interval_after_go";
     static final String REPORTER_ID = "pref_reporter_id";

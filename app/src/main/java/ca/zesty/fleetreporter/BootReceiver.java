@@ -9,7 +9,7 @@ import android.os.Build;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (new Utils(context).getIntPref(Prefs.RUNNING, 0) == 1) {
+        if (new Utils(context).getBooleanPref(Prefs.RUNNING, false)) {
             if (Build.VERSION.SDK_INT >= 26) {
                 // In API levels 26 and up, startService fails with "Not allowed
                 // to start service ... app is in background".

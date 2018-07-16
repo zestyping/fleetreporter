@@ -437,14 +437,21 @@ public class Utils {
     }
 
     public boolean getBooleanPref(String key, boolean defaultValue) {
-        return getPrefs().getBoolean(key, defaultValue);
+        try {
+            return getPrefs().getBoolean(key, defaultValue);
+        } catch (ClassCastException e) {
+            return defaultValue;
+        }
     }
 
     public int getIntPref(String key, int defaultValue) {
         int value = defaultValue;
         try {
+            return getPrefs().getInt(key, defaultValue);
+        } catch (ClassCastException e) { }
+        try {
             value = Integer.parseInt(getPrefs().getString(key, "x"));
-        } catch (NumberFormatException e) { }
+        } catch (ClassCastException | NumberFormatException e) { }
         return value;
     }
 
@@ -458,6 +465,10 @@ public class Utils {
 
     public void setPref(String key, String value) {
         getPrefs().edit().putString(key, value).commit();
+    }
+
+    public void setPref(String key, boolean value) {
+        getPrefs().edit().putBoolean(key, value).commit();
     }
 
     public void sendUssd(int slot, String code) {

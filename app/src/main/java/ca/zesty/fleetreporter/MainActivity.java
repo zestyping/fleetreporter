@@ -8,6 +8,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -96,11 +97,17 @@ public class MainActivity extends BaseActivity {
             }
         };
 
-        bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
-        if (u.getIntPref(Prefs.RUNNING, 0) == 1) {
-            startLocationService();
+        if (u.getBooleanPref(Prefs.PLAY_STORE_REQUESTED, false)) {
+            u.setPref(Prefs.RUNNING, false);
+            u.setPref(Prefs.PLAY_STORE_REQUESTED, false);
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(
+                "market://details?id=ca.zesty.fleetreporter")));
+        } else {
+            bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
+            if (u.getBooleanPref(Prefs.RUNNING, false)) {
+                startLocationService();
+            }
         }
-
     }
 
     @Override protected void onResume() {
@@ -139,7 +146,8 @@ public class MainActivity extends BaseActivity {
         if (item.getItemId() == R.id.action_pause) {
             stopLocationService();
         }
-        if (item.getItemId() == R.id.action_relaunch) {
+        if (item.getItemId() == R.id.action_update) {
+            u.setPref(Prefs.PLAY_STORE_REQUESTED, true);
             u.relaunchApp();
         }
         if (item.getItemId() == R.id.action_settings) {
@@ -256,14 +264,13 @@ public class MainActivity extends BaseActivity {
 
     private void startLocationService() {
         if (!isRegistered()) return;
-
-        u.setPref(Prefs.RUNNING, "1");
+        u.setPref(Prefs.RUNNING, true);
         bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
         startService(new Intent(this, LocationService.class));
     }
 
     private void stopLocationService() {
-        u.setPref(Prefs.RUNNING, "0");
+        u.setPref(Prefs.RUNNING, false);
         try {
             unbindService(mServiceConnection);
         } catch (IllegalArgumentException e) {
