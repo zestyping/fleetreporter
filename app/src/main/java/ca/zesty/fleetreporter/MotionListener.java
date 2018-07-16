@@ -48,7 +48,7 @@ public class MotionListener implements LocationFixListener {
     @Override public void onFix(LocationFix fix) {
         String description = "" + fix;
         if (fix != null) description += mAnchor == null ? " (no anchor)" :
-            Utils.format(" (%.1f m from anchor, settled %d s)",
+            Utils.format(" (%.0f m from anchor, settled %d s)",
                 fix.distanceTo(mAnchor), (fix.timeMillis - mSettlingStartMillis) / 1000);
         Utils.log(TAG, "onFix: " + description);
         if (fix == null) {

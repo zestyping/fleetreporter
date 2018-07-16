@@ -348,8 +348,11 @@ public class Utils {
         Utils.logRemote(TAG, "Relaunch");
         Utils.transmitLog();
         Intent intent = new Intent(context, MainActivity.class);
-        getAlarmManager().set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 300,
-            PendingIntent.getActivity(context, 1, intent, PendingIntent.FLAG_CANCEL_CURRENT));
+        getAlarmManager().set(
+            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            SystemClock.elapsedRealtime() + 300,
+            PendingIntent.getActivity(context, 1, intent, PendingIntent.FLAG_CANCEL_CURRENT)
+        );
         System.exit(0);
     }
 

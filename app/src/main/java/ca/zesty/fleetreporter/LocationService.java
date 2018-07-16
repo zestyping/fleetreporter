@@ -223,12 +223,12 @@ public class LocationService extends BaseService implements PointListener {
 
     private void setRestartAlarm() {
         Intent intent = new Intent(this, LocationService.class);
-        PendingIntent pi = PendingIntent.getService(this, 0, intent, 0);
-        u.getAlarmManager().cancel(pi);
+        PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, 0);
+        u.getAlarmManager().cancel(pendingIntent);
         u.getAlarmManager().set(
             AlarmManager.ELAPSED_REALTIME_WAKEUP,
             SystemClock.elapsedRealtime() + ALARM_INTERVAL_MILLIS,
-            pi
+            pendingIntent
         );
     }
 
