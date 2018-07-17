@@ -73,7 +73,7 @@ public class LocationService extends BaseService implements PointListener {
     static final long MINUTE = 60 * SECOND;
     static final long HOUR = 60 * MINUTE;
     static final long LOCATION_INTERVAL_MILLIS = SECOND;
-    static final long CHECK_INTERVAL_MILLIS = 10 * SECOND;
+    static final long LOOP_INTERVAL_MILLIS = 10 * SECOND;
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * SECOND;
     static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * MINUTE;
     static final long ALARM_INTERVAL_MILLIS = 10 * SECOND;
@@ -118,8 +118,8 @@ public class LocationService extends BaseService implements PointListener {
     private NmeaListener mNmeaListener = null;
     private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
     private List<Point> mVelocityPoints = new ArrayList<>();  // for calculating average velocity
-    private Point mPoint = null;  // non-provisional, null means no GPS
-    private LocationFix mLastFix = null;  // possibly provisional, never null after first assigned
+    private Point mPoint = null;  // latest non-provisional point that hasn't been transmitted yet
+    private LocationFix mLastFix = null;  // latest fix, possibly provisional, never null after first assigned
     private LocationFix mDistanceAnchor = null;
     private double mMetersTravelledSinceStop = 0;
     private Long mNoGpsSinceTimeMillis = null;
@@ -157,7 +157,7 @@ public class LocationService extends BaseService implements PointListener {
                 checkWhetherToTransmitPoints();
                 checkWhetherToPurchaseCredit(0);
                 checkWhetherToRelaunchApp();
-                mHandler.postDelayed(mRunnable, CHECK_INTERVAL_MILLIS);
+                mHandler.postDelayed(mRunnable, LOOP_INTERVAL_MILLIS);
             }
         };
         registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
@@ -368,6 +368,11 @@ public class LocationService extends BaseService implements PointListener {
                 recordPoint(mPoint);
                 mPoint = null;
             }
+        } else if (Utils.getTime() >= getNextRecordingMillis()) {
+            // If it's time to record a point and we have a GPS outage, notify the receiver.
+            if (mNoGpsSinceTimeMillis != null) {
+                transmitGpsOutage();
+            }
         }
     }
 
@@ -458,6 +463,15 @@ public class LocationService extends BaseService implements PointListener {
         // Next time, try a different slot.  If a text is successfully dispatched,
         // SmsStatusReceiver will reset mNextSimSlot to 0.
         mNextSimSlot = (slot + 1) % mNumSimSlots;
+    }
+
+    private void transmitGpsOutage() {
+        String destination = u.getPref(Prefs.DESTINATION_NUMBER);
+        if (destination == null) return;
+        String message = "fleet gpsoutage " + Utils.formatUtcTimeSeconds(Utils.getTime());
+        for (int slot = 0; slot < mNumSimSlots; slot++) {
+            u.sendSms(slot, destination, message);
+        }
     }
 
     private void checkWhetherToPurchaseCredit(int slot) {
@@ -629,6 +643,10 @@ public class LocationService extends BaseService implements PointListener {
     class PointRequestReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
             Utils.log(TAG, "Received request for current point: " + mPoint);
+            if (mNoGpsSinceTimeMillis != null) {
+                transmitGpsOutage();
+                return;
+            }
             if (mPoint == null) {
                 if (mLastRecordedPoint != null) {
                     Utils.log(TAG, "Resending last recorded point: " + mLastRecordedPoint);
