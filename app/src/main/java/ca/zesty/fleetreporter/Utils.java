@@ -436,6 +436,10 @@ public class Utils {
         return getPrefs().getString(key, defaultValue);
     }
 
+    public boolean getBooleanPref(String key) {
+        return getBooleanPref(key, false);
+    }
+
     public boolean getBooleanPref(String key, boolean defaultValue) {
         try {
             return getPrefs().getBoolean(key, defaultValue);

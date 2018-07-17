@@ -1,5 +1,6 @@
 package ca.zesty.fleetreporter;
 
+import android.content.Context;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationProvider;
@@ -10,14 +11,18 @@ import android.os.Bundle;
     re-emit the last fix (with an updated timestamp) on command.
  */
 public class LocationAdapter implements LocationListener {
+    private final Utils u;
     private final LocationFixListener mTarget;
     private LocationFix mLastFix = null;
 
-    public LocationAdapter(LocationFixListener target) {
+    public LocationAdapter(Context context, LocationFixListener target) {
+        u = new Utils(context);
         mTarget = target;
     }
 
     @Override public void onLocationChanged(Location location) {
+        if (u.getBooleanPref(Prefs.SIMULATE_GPS_OUTAGE)) return;
+
         // The phone's clock could be inaccurate.  Whenever we get a Location,
         // we can estimate the offset between the phone's clock and GPS time,
         // and this allows us to use estimated GPS time for all stored times and

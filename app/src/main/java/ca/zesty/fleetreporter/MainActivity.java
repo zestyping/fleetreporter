@@ -97,14 +97,14 @@ public class MainActivity extends BaseActivity {
             }
         };
 
-        if (u.getBooleanPref(Prefs.PLAY_STORE_REQUESTED, false)) {
+        if (u.getBooleanPref(Prefs.PLAY_STORE_REQUESTED)) {
             u.setPref(Prefs.RUNNING, false);
             u.setPref(Prefs.PLAY_STORE_REQUESTED, false);
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(
                 "market://details?id=ca.zesty.fleetreporter")));
         } else {
             bindService(new Intent(this, LocationService.class), mServiceConnection, BIND_AUTO_CREATE);
-            if (u.getBooleanPref(Prefs.RUNNING, false)) {
+            if (u.getBooleanPref(Prefs.RUNNING)) {
                 startLocationService();
             }
         }
@@ -113,7 +113,7 @@ public class MainActivity extends BaseActivity {
     @Override protected void onResume() {
         super.onResume();
         mHandler.postDelayed(mRunnable, 0);
-        u.show(R.id.message_log, u.getBooleanPref(Prefs.SHOW_LOG, false));
+        u.show(R.id.message_log, u.getBooleanPref(Prefs.SHOW_LOG));
     }
 
     @Override protected void onPause() {

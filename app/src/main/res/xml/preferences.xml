@@ -58,7 +58,13 @@
         android:title="Daily relaunch time"
         android:summary="Daily time to shut down and relaunch the app" />
 
-      <EditTextPreference
+    <CheckBoxPreference
+        android:key="pref_simulate_gps_outage"
+        android:title="Simulate GPS outage"
+        android:summary="Behave as though there is no GPS fix" />
+        android:defaultValue="false" />
+
+    <EditTextPreference
         android:key="pref_destination_number"
         android:title="Destination number"
         android:summary="Do not edit (debugging only)"

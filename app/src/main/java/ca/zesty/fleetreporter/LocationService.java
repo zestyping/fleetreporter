@@ -16,6 +16,7 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.crashlytics.android.Crashlytics;
 
@@ -165,7 +166,8 @@ public class LocationService extends BaseService implements PointListener {
         registerReceiver(mLowCreditReceiver, new IntentFilter(SmsReceiver.ACTION_LOW_CREDIT));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
-        mLocationAdapter = new LocationAdapter(new MotionListener(this, new SettlingPeriodGetter()));
+        mLocationAdapter = new LocationAdapter(
+            this, new MotionListener(this, new SettlingPeriodGetter()));
         mNmeaListener = new NmeaListener();
         mPrefsListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
             @Override public void onSharedPreferenceChanged(SharedPreferences preferences, String s) {
@@ -176,7 +178,7 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (u.getBooleanPref(Prefs.RUNNING, false)) {
+        if (u.getBooleanPref(Prefs.RUNNING)) {
             // Set an alarm to restart this service, in case it crashes.
             setRestartAlarm();
             if (!isRunning) {
@@ -656,8 +658,17 @@ public class LocationService extends BaseService implements PointListener {
 
     class NmeaListener implements GpsStatus.NmeaListener {
         public void onNmeaReceived(long timestamp, String nmeaMessage) {
-            if (nmeaMessage != null && nmeaMessage.contains("GSA")) {
-                if (nmeaMessage.split(",")[2].equals("1")) {  // GPS signal lost
+            String[] fields = ("" + nmeaMessage).split(",");
+            String type = fields[0];
+            if (u.getBooleanPref(Prefs.SIMULATE_GPS_OUTAGE)) {
+                if (type.endsWith("GSA") || type.endsWith("GGA")) {
+                    Utils.log(TAG, "Simulating GPS outage");
+                    mLocationAdapter.onGpsSignalLost();
+                }
+            } else if (fields.length > 6) {
+                if (type.endsWith("GSA") && fields[2].equals("1") ||  // 3D fix type, 1 = "no fix"
+                    type.endsWith("GGA") && fields[6].equals("0")) {  // fix quality, 0 = "invalid"
+                    Log.i(TAG, "NMEA sentence indicates no fix: " + nmeaMessage);
                     mLocationAdapter.onGpsSignalLost();
                 }
             }
