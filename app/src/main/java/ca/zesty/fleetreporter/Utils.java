@@ -537,8 +537,8 @@ public class Utils {
     }
 
     /** Shows a message box with a single button that invokes the given listener. */
-    public void showMessageBox(String title, String message, String buttonLabel, final Callback callback) {
-        new AlertDialog.Builder(context)
+    public AlertDialog showMessageBox(String title, String message, String buttonLabel, final Callback callback) {
+        return new AlertDialog.Builder(context)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(buttonLabel, callback == null ? null : new DialogInterface.OnClickListener() {

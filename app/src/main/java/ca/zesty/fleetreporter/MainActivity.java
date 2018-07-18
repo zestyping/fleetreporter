@@ -1,6 +1,7 @@
 package ca.zesty.fleetreporter;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -37,6 +38,8 @@ public class MainActivity extends BaseActivity {
     private ServiceChangedReceiver mServiceChangedReceiver = new ServiceChangedReceiver();
     private AssignmentReceiver mAssignmentReceiver = new AssignmentReceiver();
     private String mLastDestinationNumber = "";
+    private AlertDialog mAccessibilityServicePrompt = null;
+    private int mLastAccessibilityServiceCheckMinutes = Utils.getLocalMinutesSinceMidnight();
     private Handler mHandler = null;
     private Runnable mRunnable = null;
 
@@ -60,9 +63,7 @@ public class MainActivity extends BaseActivity {
             Manifest.permission.WRITE_EXTERNAL_STORAGE
         }, 0);
 
-        if (!u.isAccessibilityServiceEnabled(UssdReceiverService.class)) {
-            promptUserToEnableAccessibilityService();
-        }
+        promptUserToEnableAccessibilityService();
 
         findViewById(R.id.register_button).setOnClickListener(
             new View.OnClickListener() {
@@ -92,6 +93,7 @@ public class MainActivity extends BaseActivity {
             public void run() {
                 updateUiMode();
                 updateReportingFrame();
+                checkWhetherToPromptUserToEnableAccessibilityService();
                 mHandler.postDelayed(mRunnable, DISPLAY_INTERVAL_MILLIS);
             }
         };
@@ -329,22 +331,37 @@ public class MainActivity extends BaseActivity {
         ));
     }
 
+    void checkWhetherToPromptUserToEnableAccessibilityService() {
+        int promptTimeMinutes = 12 * 60;
+        int localMinutes = Utils.getLocalMinutesSinceMidnight();
+        if (localMinutes != mLastAccessibilityServiceCheckMinutes &&
+            localMinutes == promptTimeMinutes) {
+            promptUserToEnableAccessibilityService();
+        }
+        mLastAccessibilityServiceCheckMinutes = localMinutes;
+    }
+
     void promptUserToEnableAccessibilityService() {
-        u.showMessageBox(
-            "Settings change needed",
-            "Automatic purchasing of SMS credit requires a change " +
-                "to your Accessibility settings.  On the next screen, please:\n" +
-                "\n" +
-                "  \u2022 Find \"Fleet Reporter\"\n" +
-                "  \u2022 Enable it\n" +
-                "  \u2022 Use the back button to return here",
-            "Open Settings",
-            new Utils.Callback() {
-                @Override public void run() {
-                    startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-                }
+        if (!u.isAccessibilityServiceEnabled(UssdReceiverService.class)) {
+            if (mAccessibilityServicePrompt != null) {
+                mAccessibilityServicePrompt.dismiss();
             }
-        );
+            mAccessibilityServicePrompt = u.showMessageBox(
+                "Settings change needed",
+                "Automatic purchasing of SMS credit requires a change " +
+                    "to your Accessibility settings.  On the next screen, please:\n" +
+                    "\n" +
+                    "  \u2022 Find \"Fleet Reporter\"\n" +
+                    "  \u2022 Enable it\n" +
+                    "  \u2022 Use the back button to return here",
+                "Open Settings",
+                new Utils.Callback() {
+                    @Override public void run() {
+                        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                    }
+                }
+            );
+        }
     }
 
     class LogMessageReceiver extends BroadcastReceiver {
