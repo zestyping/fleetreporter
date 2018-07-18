@@ -12,6 +12,9 @@ public class UssdReceiverService extends AccessibilityService {
     static final String EXTRA_USSD_MESSAGE = "ussd_message";
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
+        Utils u = new Utils(this);
+        if (!u.getBooleanPref(Prefs.RUNNING)) return;
+
         AccessibilityNodeInfo source = event.getSource();
         String eventClass = String.valueOf(event.getClassName());
         String sourceClass = String.valueOf(source.getClassName());

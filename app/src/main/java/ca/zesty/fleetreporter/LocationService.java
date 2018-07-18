@@ -186,6 +186,8 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        Crashlytics.setString("reporter_id", u.getPref(Prefs.REPORTER_ID));
+        Crashlytics.setString("reporter_label", u.getPref(Prefs.REPORTER_LABEL));
         if (u.getBooleanPref(Prefs.RUNNING)) {
             // Set an alarm to restart this service, in case it crashes.
             setRestartAlarm();
@@ -464,7 +466,7 @@ public class LocationService extends BaseService implements PointListener {
             sentKeys.add(key);
             if (sentKeys.size() >= POINTS_PER_SMS_MESSAGE) break;
         }
-        Utils.log(TAG, "transmitPoints: %d in queue; sending %s",
+        Utils.logRemote(TAG, "transmitPoints: %d in queue; sending %s",
             mOutbox.size(), TextUtils.join(", ", sentKeys));
         u.sendSms(slot, destination, message.trim(), new Intent(ACTION_SMS_SENT)
             .putExtra(EXTRA_SENT_KEYS, Utils.toLongArray(sentKeys))
@@ -601,7 +603,7 @@ public class LocationService extends BaseService implements PointListener {
                 long now = Utils.getTime();
                 if (getResultCode() == Activity.RESULT_OK) {
                     for (long key : keys) {
-                        Utils.log(TAG, "Sent %d on slot %d; removing from outbox", key, slot);
+                        Utils.logRemote(TAG, "Sent %d on slot %d; removing from outbox", key, slot);
                         mOutbox.remove(key);
                         mLastSmsSentMillis = now;
                         mSmsFailingSinceMillis = null;
@@ -612,15 +614,15 @@ public class LocationService extends BaseService implements PointListener {
                     if (mSmsFailingSinceMillis == null) {
                         mSmsFailingSinceMillis = now;
                     }
-                    Utils.log(TAG, "Failed to send SMS on slot %d", slot);
+                    Utils.logRemote(TAG, "Failed to send SMS on slot %d", slot);
                     mLastFailedTransmissionMillis[slot] = now;
                     mNextSimSlot = (slot + 1) % mNumSimSlots;
                     if (now > mLastFailedTransmissionMillis[mNextSimSlot] + TRANSMISSION_INTERVAL_MILLIS) {
                         mNextTransmissionAttemptMillis[mNextSimSlot] = now;
-                        Utils.log(TAG, "Retrying on slot %d immediately", mNextSimSlot);
+                        Utils.logRemote(TAG, "Retrying on slot %d immediately", mNextSimSlot);
                         checkWhetherToTransmitPoints();
                     } else {
-                        Utils.log(TAG, "Retrying on slot %d eventually", mNextSimSlot);
+                        Utils.logRemote(TAG, "Retrying on slot %d eventually", mNextSimSlot);
                     }
                 }
             }

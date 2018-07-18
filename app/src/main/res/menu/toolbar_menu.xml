@@ -21,6 +21,11 @@
       app:showAsAction="never"/>
 
   <item
+      android:id="@+id/action_send_diagnostic_info"
+      android:title="Send diagnostic info"
+      app:showAsAction="never"/>
+
+    <item
       android:id="@+id/action_settings"
       android:title="Settings..."
       app:showAsAction="never"/>

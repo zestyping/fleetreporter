@@ -4,7 +4,6 @@ import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
@@ -161,9 +160,28 @@ public class MainActivity extends BaseActivity {
         if (item.getItemId() == R.id.action_pause) {
             stopLocationService();
         }
+        if (item.getItemId() == R.id.action_send_diagnostic_info) {
+            u.showMessageBox("Send diagnostic info",
+                "Please ensure a good Internet connection, then proceed.",
+                "Ready to proceed",
+                new Utils.Callback() {
+                    @Override public void run() {
+                        u.relaunchApp();
+                    }
+                }
+            );
+        }
         if (item.getItemId() == R.id.action_update) {
-            u.setPref(Prefs.PLAY_STORE_REQUESTED, true);
-            u.relaunchApp();
+            u.showMessageBox("Update app",
+                "Please ensure a good Internet connection, then proceed.",
+                "Ready to proceed",
+                new Utils.Callback() {
+                    @Override public void run() {
+                        u.setPref(Prefs.PLAY_STORE_REQUESTED, true);
+                        u.relaunchApp();
+                    }
+                }
+            );
         }
         if (item.getItemId() == R.id.action_settings) {
             startActivity(new Intent(this, SettingsActivity.class));
@@ -321,8 +339,8 @@ public class MainActivity extends BaseActivity {
                 "  \u2022 Enable it\n" +
                 "  \u2022 Use the back button to return here",
             "Open Settings",
-            new DialogInterface.OnClickListener() {
-                @Override public void onClick(DialogInterface dialog, int which) {
+            new Utils.Callback() {
+                @Override public void run() {
                     startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
                 }
             }

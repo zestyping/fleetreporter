@@ -491,6 +491,10 @@ public class Utils {
         void run(String str);
     }
 
+    interface Callback {
+        void run();
+    }
+
     public void hide(int id) {
         show(id, false);
     }
@@ -533,11 +537,15 @@ public class Utils {
     }
 
     /** Shows a message box with a single button that invokes the given listener. */
-    public void showMessageBox(String title, String message, String buttonLabel, DialogInterface.OnClickListener listener) {
+    public void showMessageBox(String title, String message, String buttonLabel, final Callback callback) {
         new AlertDialog.Builder(context)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton(buttonLabel, listener)
+            .setPositiveButton(buttonLabel, callback == null ? null : new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface dialog, int which) {
+                    callback.run();
+                }
+            })
             .show();
     }
 
