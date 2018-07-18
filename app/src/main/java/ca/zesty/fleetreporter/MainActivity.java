@@ -139,9 +139,24 @@ public class MainActivity extends BaseActivity {
         return true;
     }
 
+    @Override public boolean onPrepareOptionsMenu(Menu menu) {
+        menu.findItem(R.id.action_register_additional_numbers).setEnabled(isRegistered());
+        return true;
+    }
+
     @Override public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.action_register) {
             registerReporter();
+        }
+        if (item.getItemId() == R.id.action_register_additional_numbers) {
+            String destination = u.getPref(Prefs.DESTINATION_NUMBER);
+            String reporterId = u.getPref(Prefs.REPORTER_ID);
+            if (!destination.isEmpty() && !reporterId.isEmpty()) {
+                for (int slot = 0; slot < u.getNumSimSlots(); slot++) {
+                    u.sendSms(slot, destination, "fleet activate " + reporterId);
+                }
+                u.showMessageBox("Registering additional numbers", "Sent registration messages.");
+            }
         }
         if (item.getItemId() == R.id.action_pause) {
             stopLocationService();
