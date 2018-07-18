@@ -73,6 +73,7 @@ public class SmsReceiver extends BroadcastReceiver {
         if (matcher.find()) {
             Utils.logRemote(TAG, "USSD request: " + body);
             context.sendBroadcast(new Intent(ACTION_USSD_REQUEST)
+                .putExtra(EXTRA_SENDER, sender)
                 .putExtra(EXTRA_SLOT, Integer.valueOf(matcher.group(1)))
                 .putExtra(EXTRA_USSD_CODE, matcher.group(2).trim()));
         }

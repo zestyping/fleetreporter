@@ -132,7 +132,7 @@ public class LocationService extends BaseService implements PointListener {
     private long mLastCfaBalanceCheckMillis = 0;
     private long mLastSlot1BalanceCheckMillis = 0;
     private long mLastCreditCheckMillis = 0;
-    private boolean mTransmitNextUssdReply = false;
+    private String mTransmitNextUssdReplyDestination = null;
 
     private String mLastReporterId;
     private Point mLastRecordedPoint;
@@ -630,9 +630,12 @@ public class LocationService extends BaseService implements PointListener {
     class UssdReplyReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
             String message = intent.getStringExtra(UssdReceiverService.EXTRA_USSD_MESSAGE);
-            if (mTransmitNextUssdReply) {
-                mTransmitNextUssdReply = false;
-                transmitOnAllSlots("fleet ussdreply " + message);
+            if (mTransmitNextUssdReplyDestination != null) {
+                message = "fleet ussdreply " + message;
+                for (int slot = 0; slot < mNumSimSlots; slot++) {
+                    u.sendSms(slot, mTransmitNextUssdReplyDestination, message);
+                }
+                mTransmitNextUssdReplyDestination = null;
             }
 
             String subscriberId = u.getImsi(0);
@@ -700,7 +703,7 @@ public class LocationService extends BaseService implements PointListener {
             int slot = intent.getIntExtra(SmsReceiver.EXTRA_SLOT, 1) - 1;
             String ussdCode = intent.getStringExtra(SmsReceiver.EXTRA_USSD_CODE);
             Utils.log(TAG, "Received request for USSD command: " + ussdCode);
-            mTransmitNextUssdReply = true;
+            mTransmitNextUssdReplyDestination = intent.getStringExtra(SmsReceiver.EXTRA_SENDER);
             u.sendUssd(slot, ussdCode);
         }
     }
