@@ -112,6 +112,8 @@ public class LocationService extends BaseService implements PointListener {
     private UssdReplyReceiver mUssdReplyReceiver = new UssdReplyReceiver();
     private PointRequestReceiver mPointRequestReceiver = new PointRequestReceiver();
     private LowCreditReceiver mLowCreditReceiver = new LowCreditReceiver();
+    private UssdRequestReceiver mUssdRequestReceiver = new UssdRequestReceiver();
+
     private PowerManager.WakeLock mWakeLock = null;
 
     private LocationAdapter mLocationAdapter = null;
@@ -128,12 +130,14 @@ public class LocationService extends BaseService implements PointListener {
     private long mLastCfaBalanceCheckMillis = 0;
     private long mLastSlot1BalanceCheckMillis = 0;
     private long mLastCreditCheckMillis = 0;
+    private boolean mTransmitNextUssdReply = false;
 
     private String mLastReporterId;
     private Point mLastRecordedPoint;
     private int mNumSimSlots;
     private long[] mLastFailedTransmissionMillis;
     private long[] mNextTransmissionAttemptMillis;
+    private long mLastTransmittedGpsOutageMillis = 0;
     private Long mLastSmsSentMillis = null;
     private Long mSmsFailingSinceMillis = null;
     private int mNextSimSlot = 0;
@@ -162,7 +166,8 @@ public class LocationService extends BaseService implements PointListener {
         };
         registerReceiver(mSmsStatusReceiver, new IntentFilter(ACTION_SMS_SENT));
         registerReceiver(mUssdReplyReceiver, new IntentFilter(UssdReceiverService.ACTION_USSD_RECEIVED));
-        registerReceiver(mPointRequestReceiver, new IntentFilter(SmsReceiver.ACTION_POINT_REQUESTED));
+        registerReceiver(mPointRequestReceiver, new IntentFilter(SmsReceiver.ACTION_POINT_REQUEST));
+        registerReceiver(mUssdRequestReceiver, new IntentFilter(SmsReceiver.ACTION_USSD_REQUEST));
         registerReceiver(mLowCreditReceiver, new IntentFilter(SmsReceiver.ACTION_LOW_CREDIT));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
@@ -218,6 +223,7 @@ public class LocationService extends BaseService implements PointListener {
         unregisterReceiver(mSmsStatusReceiver);
         unregisterReceiver(mUssdReplyReceiver);
         unregisterReceiver(mPointRequestReceiver);
+        unregisterReceiver(mUssdRequestReceiver);
         unregisterReceiver(mLowCreditReceiver);
         u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
@@ -357,6 +363,13 @@ public class LocationService extends BaseService implements PointListener {
             mNextTransmissionAttemptMillis = new long[mNumSimSlots];
             mLastSmsSentMillis = null;
         }
+        long now = Utils.getTime();
+        if (mNoGpsSinceTimeMillis != null && now >= getNextRecordingMillis() &&
+            now >= mLastTransmittedGpsOutageMillis + u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL, 10)) {
+            // If it's time to record a point and we have a GPS outage, notify the receiver.
+            transmitGpsOutage();
+            mLastTransmittedGpsOutageMillis = Utils.getTime();
+        }
         if (mPoint != null) {
             // If we've just transitioned between resting and moving, record the
             // point immediately; otherwise wait until we're next scheduled to record.
@@ -367,11 +380,6 @@ public class LocationService extends BaseService implements PointListener {
                 }
                 recordPoint(mPoint);
                 mPoint = null;
-            }
-        } else if (Utils.getTime() >= getNextRecordingMillis()) {
-            // If it's time to record a point and we have a GPS outage, notify the receiver.
-            if (mNoGpsSinceTimeMillis != null) {
-                transmitGpsOutage();
             }
         }
     }
@@ -466,9 +474,13 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     private void transmitGpsOutage() {
+        transmitOnAllSlots(
+            "fleet gpsoutage " + Utils.formatUtcTimeSeconds(Utils.getTime()));
+    }
+
+    private void transmitOnAllSlots(String message) {
         String destination = u.getPref(Prefs.DESTINATION_NUMBER);
         if (destination == null) return;
-        String message = "fleet gpsoutage " + Utils.formatUtcTimeSeconds(Utils.getTime());
         for (int slot = 0; slot < mNumSimSlots; slot++) {
             u.sendSms(slot, destination, message);
         }
@@ -613,12 +625,17 @@ public class LocationService extends BaseService implements PointListener {
 
     class UssdReplyReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context context, Intent intent) {
-            String subscriberId = u.getImsi(0);
             String message = intent.getStringExtra(UssdReceiverService.EXTRA_USSD_MESSAGE);
+            if (mTransmitNextUssdReply) {
+                mTransmitNextUssdReply = false;
+                transmitOnAllSlots("fleet ussdreply " + message);
+            }
 
-            Matcher matcher = SMS_BALANCE_CHECK_PATTERN.matcher(message);
+            String subscriberId = u.getImsi(0);
             long now = Utils.getTime();
             long expirationMillis = now + SMS_BALANCE_DEFAULT_TTL_MILLIS;
+
+            Matcher matcher = SMS_BALANCE_CHECK_PATTERN.matcher(message);
             if (matcher.find()) {
                 long amount = Long.parseLong(matcher.group(1));
                 matcher = SMS_BALANCE_EXPIRATION_PATTERN.matcher(message);
@@ -671,6 +688,16 @@ public class LocationService extends BaseService implements PointListener {
             String amount = intent.getStringExtra(SmsReceiver.EXTRA_AMOUNT);
             Utils.log(TAG, "Forwarding low-credit alert to receiver");
             u.sendSms(0, destination, "fleet balance main_xaf " + amount);
+        }
+    }
+
+    class UssdRequestReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            int slot = intent.getIntExtra(SmsReceiver.EXTRA_SLOT, 1) - 1;
+            String ussdCode = intent.getStringExtra(SmsReceiver.EXTRA_USSD_CODE);
+            Utils.log(TAG, "Received request for USSD command: " + ussdCode);
+            mTransmitNextUssdReply = true;
+            u.sendUssd(slot, ussdCode);
         }
     }
 
