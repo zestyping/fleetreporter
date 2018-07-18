@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.location.GpsStatus;
 import android.location.LocationManager;
+import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
@@ -113,6 +114,7 @@ public class LocationService extends BaseService implements PointListener {
     private PointRequestReceiver mPointRequestReceiver = new PointRequestReceiver();
     private LowCreditReceiver mLowCreditReceiver = new LowCreditReceiver();
     private UssdRequestReceiver mUssdRequestReceiver = new UssdRequestReceiver();
+    private BatteryRequestReceiver mBatteryRequestReceiver = new BatteryRequestReceiver();
 
     private PowerManager.WakeLock mWakeLock = null;
 
@@ -168,6 +170,7 @@ public class LocationService extends BaseService implements PointListener {
         registerReceiver(mUssdReplyReceiver, new IntentFilter(UssdReceiverService.ACTION_USSD_RECEIVED));
         registerReceiver(mPointRequestReceiver, new IntentFilter(SmsReceiver.ACTION_POINT_REQUEST));
         registerReceiver(mUssdRequestReceiver, new IntentFilter(SmsReceiver.ACTION_USSD_REQUEST));
+        registerReceiver(mBatteryRequestReceiver, new IntentFilter(SmsReceiver.ACTION_BATTERY_REQUEST));
         registerReceiver(mLowCreditReceiver, new IntentFilter(SmsReceiver.ACTION_LOW_CREDIT));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
@@ -224,6 +227,7 @@ public class LocationService extends BaseService implements PointListener {
         unregisterReceiver(mUssdReplyReceiver);
         unregisterReceiver(mPointRequestReceiver);
         unregisterReceiver(mUssdRequestReceiver);
+        unregisterReceiver(mBatteryRequestReceiver);
         unregisterReceiver(mLowCreditReceiver);
         u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
@@ -698,6 +702,21 @@ public class LocationService extends BaseService implements PointListener {
             Utils.log(TAG, "Received request for USSD command: " + ussdCode);
             mTransmitNextUssdReply = true;
             u.sendUssd(slot, ussdCode);
+        }
+    }
+
+    class BatteryRequestReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context context, Intent intent) {
+            Intent status = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            try {
+                int level = status.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale = status.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                int percent = 100*level/scale;
+                boolean isPlugged = status.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) != 0;
+                transmitOnAllSlots("fleet battery " + percent + " " + (isPlugged ? "plugged" : "unplugged"));
+            } catch (NullPointerException e) {
+                transmitOnAllSlots("fleet battery unknown");
+            }
         }
     }
 
