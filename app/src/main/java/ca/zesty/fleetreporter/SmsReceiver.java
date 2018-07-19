@@ -56,6 +56,7 @@ public class SmsReceiver extends BroadcastReceiver {
             Utils.logRemote(TAG, "SMS received: " + body);
             context.sendBroadcast(new Intent(ACTION_LOW_CREDIT)
                 .putExtra(EXTRA_SENDER, sender)
+                .putExtra(EXTRA_SLOT, 0)
                 .putExtra(EXTRA_AMOUNT, matcher.group(1))
             );
         }

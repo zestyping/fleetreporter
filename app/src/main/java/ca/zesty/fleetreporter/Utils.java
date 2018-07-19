@@ -189,6 +189,15 @@ public class Utils {
         return localTime.get(Calendar.HOUR_OF_DAY) * 60 + localTime.get(Calendar.MINUTE);
     }
 
+    public static String formatLocalDate() {
+        Calendar today = Calendar.getInstance();
+        return Utils.format("%04d-%02d-%02d",
+            today.get(Calendar.YEAR),
+            today.get(Calendar.MONTH) + 1,  // Java is fucking insane
+            today.get(Calendar.DAY_OF_MONTH)
+        );
+    }
+
     public static boolean isLocalTimeOfDayBetween(String startHourMinute, String endHourMinute) {
         int startMinutes = countMinutesSinceMidnight(startHourMinute);
         int endMinutes = countMinutesSinceMidnight(endHourMinute);
@@ -364,7 +373,11 @@ public class Utils {
 
     /** Sends a text message using the default SmsManager. */
     public void sendSms(int slot, String recipient, String body) {
-        sendSms(slot, recipient, body, null);
+        try {
+            sendSms(slot, recipient, body, null);
+        } catch (IllegalArgumentException e) {
+            log(TAG, "Error sending SMS: " + e);
+        }
     }
 
     /** Sends a text message using the default SmsManager. */
@@ -477,12 +490,19 @@ public class Utils {
         return value;
     }
 
-    public long getMinutePrefInMillis(String key, double defaultMinutes) {
-        double minutes = defaultMinutes;
+    public float getFloatPref(String key, double defaultValue) {
+        float value = (float) defaultValue;
         try {
-            minutes = Double.valueOf(getPrefs().getString(key, "x"));
-        } catch (NumberFormatException e) { }
-        return Math.round(minutes * 60 * 1000);
+            return getPrefs().getFloat(key, value);
+        } catch (ClassCastException e) { }
+        try {
+            value = Float.parseFloat(getPrefs().getString(key, "x"));
+        } catch (ClassCastException | NumberFormatException e) { }
+        return value;
+    }
+
+    public long getMinutePrefInMillis(String key, double defaultMinutes) {
+        return Math.round(getFloatPref(key, defaultMinutes) * 60 * 1000);
     }
 
     public void setPref(String key, String value) {

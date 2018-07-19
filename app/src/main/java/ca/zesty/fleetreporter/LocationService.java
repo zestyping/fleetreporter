@@ -26,6 +26,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Comparator;
 import java.util.List;
 import java.util.SortedMap;
@@ -49,9 +50,11 @@ import io.fabric.sdk.android.Fabric;
         v
     mPoint (the latest point)
         |
-        |   recordPoint() (~ once every pref_recording_interval minutes)
-        |       pref_recording_interval sets the length of time between points
-        |       that will be recorded as a track or plotted on a map.
+        |   recordPoint() (~ once every pref_recording_interval_... minutes)
+        |       pref_recording_interval_resting sets the length of time between
+        |       points recorded while resting.
+        |       pref_recording_interval_moving sets the length of time between
+        |       points that will be recorded as a track or plotted on a map.
         |       pref_recording_interval_after_go should be a shorter interval
         |       used to send a point after a transition from resting to moving.
         v
@@ -77,7 +80,7 @@ public class LocationService extends BaseService implements PointListener {
     static final long LOOP_INTERVAL_MILLIS = 10 * SECOND;
     static final long TRANSMISSION_INTERVAL_MILLIS = 30 * SECOND;
     static final long DEFAULT_SETTLING_PERIOD_MILLIS = 2 * MINUTE;
-    static final long ALARM_INTERVAL_MILLIS = 10 * SECOND;
+    static final long ALARM_INTERVAL_MILLIS = 20 * SECOND;
     static final long VELOCITY_MIN_INTERVAL_MILLIS = 20 * SECOND;
     static final long VELOCITY_MAX_INTERVAL_MILLIS = 35 * SECOND;
     static final int VELOCITY_NUM_SAMPLES = 4;
@@ -174,8 +177,7 @@ public class LocationService extends BaseService implements PointListener {
         registerReceiver(mLowCreditReceiver, new IntentFilter(SmsReceiver.ACTION_LOW_CREDIT));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
-        mLocationAdapter = new LocationAdapter(
-            this, new MotionListener(this, new SettlingPeriodGetter()));
+        mLocationAdapter = new LocationAdapter(this, new MotionListener(this, this));
         mNmeaListener = new NmeaListener();
         mPrefsListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
             @Override public void onSharedPreferenceChanged(SharedPreferences preferences, String s) {
@@ -188,11 +190,14 @@ public class LocationService extends BaseService implements PointListener {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         Crashlytics.setString("reporter_id", u.getPref(Prefs.REPORTER_ID));
         Crashlytics.setString("reporter_label", u.getPref(Prefs.REPORTER_LABEL));
+
         if (u.getBooleanPref(Prefs.RUNNING)) {
             // Set an alarm to restart this service, in case it crashes.
             setRestartAlarm();
+            logPrefs(!isRunning);
             if (!isRunning) {
                 Utils.logRemote(TAG, "Startup");
+
                 mNumSimSlots = u.getNumSimSlots();
                 mLastFailedTransmissionMillis = new long[mNumSimSlots];
                 mNextTransmissionAttemptMillis = new long[mNumSimSlots];
@@ -233,6 +238,30 @@ public class LocationService extends BaseService implements PointListener {
         unregisterReceiver(mLowCreditReceiver);
         u.getPrefs().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
         sendBroadcast(new Intent(ACTION_SERVICE_CHANGED));
+    }
+
+    private void logPrefs(boolean verbose) {
+        try {
+            for (String key : Prefs.KEYS) {
+                Object value = null;
+                try { value = u.getPref(key); }
+                catch (Exception e) {
+                    try { value = u.getBooleanPref(key); }
+                    catch (Exception ee) {
+                        try { value = u.getIntPref(key, -1); }
+                        catch (Exception eee) {
+                            try { value = u.getFloatPref(key, -1); }
+                            catch (Exception eeee) { }
+                        }
+                    }
+                }
+                if (verbose) Utils.logRemote(TAG, key + ": " + value);
+                else Utils.log(TAG, key + ": " + value);
+                Crashlytics.setString(key, "" + value);
+            }
+        } catch (Exception e) {
+            Utils.logRemote(TAG, "Problem setting keys: " + e);
+        }
     }
 
     private void setRestartAlarm() {
@@ -371,7 +400,7 @@ public class LocationService extends BaseService implements PointListener {
         }
         long now = Utils.getTime();
         if (mNoGpsSinceTimeMillis != null && now >= getNextRecordingMillis() &&
-            now >= mLastTransmittedGpsOutageMillis + u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL, 10)) {
+            now >= mLastTransmittedGpsOutageMillis + u.getMinutePrefInMillis(Prefs.REPORTING_INTERVAL_GPS_OUTAGE, 30)) {
             // If it's time to record a point and we have a GPS outage, notify the receiver.
             transmitGpsOutage();
             mLastTransmittedGpsOutageMillis = Utils.getTime();
@@ -397,9 +426,11 @@ public class LocationService extends BaseService implements PointListener {
         // elapsed after the fix time, not after when the point was sent.
         if (mLastRecordedPoint == null) return Utils.getTime();
         return mLastRecordedPoint.fix.timeMillis + (
+            mLastRecordedPoint.type == Point.Type.RESTING || mLastRecordedPoint.type == Point.Type.STOP ?
+                u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_RESTING, 30) :
             mLastRecordedPoint.type == Point.Type.GO ?
-                u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_AFTER_GO, 1) :
-                u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL, 10)
+                u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_AFTER_GO, 2) :
+                u.getMinutePrefInMillis(Prefs.RECORDING_INTERVAL_MOVING, 10)
         );
     }
 
@@ -457,6 +488,8 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Transmits some of the pending points in the outbox over SMS. */
     private void transmitPoints(int slot) {
+        if (dailyPointSmsLimitReached()) return;
+
         String destination = u.getPref(Prefs.DESTINATION_NUMBER);
         if (destination == null) return;
         String message = "";
@@ -480,8 +513,33 @@ public class LocationService extends BaseService implements PointListener {
     }
 
     private void transmitGpsOutage() {
-        transmitOnAllSlots(
-            "fleet gpsoutage " + Utils.formatUtcTimeSeconds(Utils.getTime()));
+        if (dailyPointSmsLimitReached()) return;
+        transmitOnAllSlots("fleet gpsoutage " + Utils.formatUtcTimeSeconds(Utils.getTime()));
+        incrementDailyPointSmsCount();
+    }
+
+    private int getDailyPointSmsCount() {
+        String date = Utils.formatLocalDate();
+        String countDate = u.getPref(Prefs.POINT_SMS_COUNT_LOCAL_DATE, date);
+        return date.equals(countDate) ? u.getIntPref(Prefs.POINT_SMS_COUNT, 0) : 0;
+    }
+
+    private boolean dailyPointSmsLimitReached() {
+        int count = getDailyPointSmsCount();
+        Utils.log(TAG, "Point SMS count so far today: " + count);
+        if (count >= u.getIntPref(Prefs.DAILY_POINT_SMS_LIMIT, 48)) {
+            Utils.logRemote(TAG, "Point SMS limit reached: " + count);
+            return true;
+        }
+        return false;
+    }
+
+    private void incrementDailyPointSmsCount() {
+        String localDate = Utils.formatLocalDate();
+        int count = getDailyPointSmsCount() + 1;
+        u.setPref(Prefs.POINT_SMS_COUNT_LOCAL_DATE, localDate);
+        u.setPref(Prefs.POINT_SMS_COUNT, "" + count);
+        Utils.logRemote(TAG, "SMS count for %s incremented to: %d", localDate, count);
     }
 
     private void transmitOnAllSlots(String message) {
@@ -602,6 +660,7 @@ public class LocationService extends BaseService implements PointListener {
                 int slot = intent.getIntExtra(EXTRA_SLOT, 0);
                 long now = Utils.getTime();
                 if (getResultCode() == Activity.RESULT_OK) {
+                    incrementDailyPointSmsCount();
                     for (long key : keys) {
                         Utils.logRemote(TAG, "Sent %d on slot %d; removing from outbox", key, slot);
                         mOutbox.remove(key);
@@ -694,9 +753,11 @@ public class LocationService extends BaseService implements PointListener {
         @Override public void onReceive(Context context, Intent intent) {
             String destination = u.getPref(Prefs.DESTINATION_NUMBER);
             if (destination == null) return;
+            int slot = intent.getIntExtra(SmsReceiver.EXTRA_SLOT, 0);
             String amount = intent.getStringExtra(SmsReceiver.EXTRA_AMOUNT);
             Utils.log(TAG, "Forwarding low-credit alert to receiver");
-            u.sendSms(0, destination, "fleet balance main_xaf " + amount);
+            String message = Utils.format("fleet balance %s main_xaf %s", u.getImsi(slot), amount);
+            u.sendSms(0, destination, message);
         }
     }
 

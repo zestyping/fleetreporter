@@ -4,9 +4,25 @@
     android:title="@string/settings">
 
   <EditTextPreference
-      android:key="pref_recording_interval"
-      android:title="@string/pref_recording_interval"
-      android:summary="@string/pref_recording_interval_summary"
+      android:key="pref_daily_point_sms_limit"
+      android:title="@string/pref_daily_point_sms_limit"
+      android:summary="@string/pref_daily_point_sms_limit_summary"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="24" />
+
+  <EditTextPreference
+      android:key="pref_recording_interval_resting"
+      android:title="@string/pref_recording_interval_resting"
+      android:summary="@string/pref_recording_interval_resting_summary"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="30" />
+
+  <EditTextPreference
+      android:key="pref_recording_interval_moving"
+      android:title="@string/pref_recording_interval_moving"
+      android:summary="@string/pref_recording_interval_moving_summary"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="10" />
@@ -17,7 +33,23 @@
       android:summary="@string/pref_recording_interval_after_go_summary"
       android:numeric="decimal"
       android:inputType="numberDecimal"
-      android:defaultValue="1" />
+      android:defaultValue="2" />
+
+  <EditTextPreference
+      android:key="pref_reporting_interval_gps_outage"
+      android:title="@string/pref_reporting_interval_gps_outage"
+      android:summary="@string/pref_reporting_interval_gps_outage_summary"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="30" />
+
+  <EditTextPreference
+      android:key="pref_resting_radius"
+      android:title="@string/pref_resting_radius"
+      android:summary="@string/pref_resting_radius_summary"
+      android:numeric="decimal"
+      android:inputType="numberDecimal"
+      android:defaultValue="40" />
 
   <EditTextPreference
       android:key="pref_settling_period"
@@ -52,6 +84,22 @@
         android:key="pref_show_log"
         android:title="Show message log"
         android:defaultValue="false" />
+
+    <EditTextPreference
+        android:key="pref_stable_max_accuracy"
+        android:title="Stable maximum accuracy"
+        android:summary="Maximum accuracy of a fix accepted as stable, in meters"
+        android:numeric="decimal"
+        android:inputType="numberDecimal"
+        android:defaultValue="60" />
+
+    <EditTextPreference
+        android:key="pref_stable_max_speed"
+        android:title="Stable maximum speed"
+        android:summary="Maximum speed of a fix accepted as stable, in km/h"
+        android:numeric="decimal"
+        android:inputType="numberDecimal"
+        android:defaultValue="5" />
 
     <ca.zesty.fleetreporter.TimePreference
         android:key="pref_daily_relaunch_time"
