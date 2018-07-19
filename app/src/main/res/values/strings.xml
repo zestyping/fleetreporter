@@ -28,7 +28,7 @@
   <string name="registration">Registration</string>
   <string name="receivers_mobile_number_colon">Receiver\'s mobile number:</string>
   <string name="settings_change_needed">Settings change needed</string>
-  <string name="accessibility_service_instructions">Automatic purchasing of SMS credit requires a change to your Accessibility settings.  On the next screen, please:&#10;  • Find \"Fleet Reporter\"&#10;  • Enable it&#10;  • Use the Back button to return here</string>
+  <string name="accessibility_service_instructions">Automatic purchasing of SMS credit requires a change to your Accessibility settings.\u0020\u0020On the next screen, please:\n\n\u0020\u0020\u2022 Find \"Fleet Reporter\"\n\u0020\u0020\u2022 Turn it on\n\u0020\u0020\u2022 Use the Back button to return here</string>
   <string name="open_settings_button">Open Settings</string>
   <string name="register_additional_numbers">Register additional numbers</string>
   <string name="sent_registration_messages_to">Sent registration messages to the receiver from:</string>
