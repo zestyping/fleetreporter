@@ -57,7 +57,7 @@
     <string name="settings">Paramètres</string>
     <string name="invalid_number">Numéro invalide.</string>
     <string name="pref_recording_interval">Intervalle d\'enregistrement</string>
-    <string name="pref_recording_interval_summary">Maximum minutes entre les points enregistrés</string>
+    <string name="pref_recording_interval_summary">Minutes maximum entre les points enregistrés</string>
     <string name="pref_recording_interval_after_go">Intervalle d\'enregistrement après commencer à bouger</string>
     <string name="pref_recording_interval_after_go_summary">Minutes après partir d\'un arrêt quand enregistrer un point additionnel</string>
     <string name="pref_settling_period">Période de stabilisation</string>
@@ -66,7 +66,7 @@
     <string name="pref_sleep_start_summary">Début de la période quotidien quand les rapports sont réprimés</string>
     <string name="pref_sleep_end">Heure de réveil</string>
     <string name="pref_sleep_end_summary">Fin de la période quotidien quand les rapports sont réprimés</string>
-    <string name="pref_sms_purchase_interval">Intervalle d\'achat des forfaits SMS</string>
-    <string name="pref_sms_purchase_interval_summary">Minutes après un achat de forfait SMS pour attendre avant que l\'acheter encore</string>
+    <string name="pref_sms_purchase_interval">Intervalle minimum d\'achat des forfaits SMS</string>
+    <string name="pref_sms_purchase_interval_summary">Minutes après un achat de forfait SMS pour éviter de l\'acheter à nouveau</string>
     <string name="pref_developer_settings">Options de développement</string>
 </resources>

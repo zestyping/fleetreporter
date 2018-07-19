@@ -65,7 +65,7 @@
   <string name="pref_sleep_start_summary">Start of daily period when reporting is suppressed</string>
   <string name="pref_sleep_end">Sleep ending time</string>
   <string name="pref_sleep_end_summary">End of daily period when reporting is suppressed</string>
-  <string name="pref_sms_purchase_interval">SMS purchasing interval</string>
-  <string name="pref_sms_purchase_interval_summary">Minutes after an SMS purchase to hold off purchasing again</string>
+  <string name="pref_sms_purchase_interval">Minimum SMS purchasing interval</string>
+  <string name="pref_sms_purchase_interval_summary">Minutes after purchasing an SMS package to hold off purchasing another</string>
   <string name="pref_developer_settings">Developer settings</string>
 </resources>
