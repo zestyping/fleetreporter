@@ -15,5 +15,5 @@ public class Prefs {
     static final String SIMULATE_GPS_OUTAGE = "pref_simulate_gps_outage";
     static final String SLEEP_START = "pref_sleep_start";
     static final String SLEEP_END = "pref_sleep_end";
-    static final String SMS_PURCHASE_INTERVAL = "pref_sms_purchasing_interval";
+    static final String SMS_PURCHASE_INTERVAL = "pref_sms_purchase_interval";
 }

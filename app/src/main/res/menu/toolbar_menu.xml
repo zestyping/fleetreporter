@@ -7,31 +7,31 @@
 
   <item
       android:id="@+id/action_register"
-      android:title="Register"
+      android:title="@string/register"
       app:showAsAction="never"/>
 
   <item
       android:id="@+id/action_register_additional_numbers"
-      android:title="Register additional numbers"
+      android:title="@string/register_additional_numbers"
       app:showAsAction="never"/>
 
   <item
       android:id="@+id/action_pause"
-      android:title="Pause reporting"
+      android:title="@string/pause_reporting"
       app:showAsAction="never"/>
 
   <item
       android:id="@+id/action_send_diagnostic_info"
-      android:title="Send diagnostic info"
+      android:title="@string/send_diagnostic_info"
       app:showAsAction="never"/>
 
     <item
       android:id="@+id/action_settings"
-      android:title="Settings..."
+      android:title="@string/settings_ellipsis"
       app:showAsAction="never"/>
 
   <item
       android:id="@+id/action_update"
-      android:title="Update app..."
+      android:title="@string/update_app_ellipsis"
       app:showAsAction="never"/>
 </menu>

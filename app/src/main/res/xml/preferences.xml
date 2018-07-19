@@ -1,52 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:title="Settings">
+    android:title="@string/settings">
 
   <EditTextPreference
       android:key="pref_recording_interval"
-      android:title="Recording interval"
-      android:summary="Maximum minutes between recorded points"
+      android:title="@string/pref_recording_interval"
+      android:summary="@string/pref_recording_interval_summary"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="10" />
 
   <EditTextPreference
       android:key="pref_recording_interval_after_go"
-      android:title="Recording interval upon starting to move"
-      android:summary="Minutes after departing from a stop to record an extra point"
+      android:title="@string/pref_recording_interval_after_go"
+      android:summary="@string/pref_recording_interval_after_go_summary"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="1" />
 
   <EditTextPreference
       android:key="pref_settling_period"
-      android:title="Settling period"
-      android:summary="Minutes of not moving to interpret as a stop"
+      android:title="@string/pref_settling_period"
+      android:summary="@string/pref_settling_period_summary"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="2" />
 
   <ca.zesty.fleetreporter.TimePreference
       android:key="pref_sleep_start"
-      android:title="Sleep starting time"
-      android:summary="Start of daily period when reporting is suppressed" />
+      android:title="@string/pref_sleep_start"
+      android:summary="@string/pref_sleep_start_summary" />
 
   <ca.zesty.fleetreporter.TimePreference
       android:key="pref_sleep_end"
-      android:title="Sleep ending time"
-      android:summary="End of daily period when reporting is suppressed" />
+      android:title="@string/pref_sleep_end"
+      android:summary="@string/pref_sleep_end_summary" />
 
   <EditTextPreference
-      android:key="pref_sms_purchasing_interval"
-      android:title="SMS purchasing interval"
-      android:summary="Minutes after an SMS purchase to hold off purchasing again"
+      android:key="pref_sms_purchase_interval"
+      android:title="@string/pref_sms_purchase_interval"
+      android:summary="@string/pref_sms_purchase_interval_summary"
       android:numeric="decimal"
       android:inputType="numberDecimal"
       android:defaultValue="60" />
 
   <PreferenceScreen
-    android:title="Developer settings">
+    android:title="@string/pref_developer_settings">
 
     <CheckBoxPreference
         android:key="pref_show_log"

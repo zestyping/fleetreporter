@@ -287,19 +287,19 @@ public class LocationService extends BaseService implements PointListener {
             this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
 
         String message =
-            (mNoGpsSinceTimeMillis != null ? "GPS signal lost.  " : "") +
-            (mSmsFailingSinceMillis != null ? "Unable to send SMS.  " : "");
-        if (message.isEmpty()) message = "Reporting your location.  ";
+            (mNoGpsSinceTimeMillis != null ? getString(R.string.notif_gps_signal_lost) + "  " : "") +
+            (mSmsFailingSinceMillis != null ? getString(R.string.notif_unable_to_send_sms) + "  " : "");
+        if (message.isEmpty()) message = getString(R.string.notif_reporting_your_location) + "  ";
         if (mLastSmsSentMillis != null) message += Utils.format(
-            "Last SMS sent %s.  ", Utils.describeTime(mLastSmsSentMillis));
+            getString(R.string.fmt_notif_last_sms_sent_tm), u.describeTime(mLastSmsSentMillis)) + "  ";
         int minutes = (int) Math.max(
             0, Math.ceil((getNextRecordingMillis() - Utils.getTime()) / 60000));
         message += minutes == 0 ?
-            "Next report in < 1 min." :
-            Utils.format("Next report in %d min.", minutes);
+            getString(R.string.notif_next_report_lt_1_min) :
+            Utils.format(getString(R.string.fmt_notif_next_report_n_min), minutes);
 
         return new NotificationCompat.Builder(this)
-            .setContentTitle("Fleet Reporter")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(message.trim())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)

@@ -144,28 +144,26 @@ public class Utils {
     }
 
     /** Describes a time period using a short phrase like "23 min". */
-    public static String describePeriod(long elapsedMillis) {
+    public String describePeriod(long elapsedMillis) {
         return describePeriod(elapsedMillis, false);
     }
 
     /** Describes a time period using a short phrase like "23 min". */
-    public static String describePeriod(long elapsedMillis, boolean showSeconds) {
+    public String describePeriod(long elapsedMillis, boolean showSeconds) {
         long elapsedSec = elapsedMillis/1000;
-        if (elapsedSec < 60 && showSeconds) return format("%d sec", elapsedSec);
-        if (elapsedSec < 3600) return format("%d min", elapsedSec/60);
-        if (elapsedSec < 36000)
-            return format("%.1f h", (float) elapsedSec/3600);
-        if (elapsedSec < 24*3600) return format("%d h", elapsedSec/3600);
-        if (elapsedSec < 7*24*3600)
-            return format("%.1f d", (float) elapsedSec/24/3600);
-        return format("%d d", elapsedSec/24/3600);
+        if (elapsedSec < 60 && showSeconds) return str(R.string.fmt_period_n_sec, elapsedSec);
+        if (elapsedSec < 3600) return str(R.string.fmt_period_n_min, elapsedSec/60);
+        if (elapsedSec < 36000) return str(R.string.fmt_period_f_h, (float) elapsedSec/3600);
+        if (elapsedSec < 24*3600) return str(R.string.fmt_period_n_h, elapsedSec/3600);
+        if (elapsedSec < 7*24*3600) return str(R.string.fmt_period_f_d, (float) elapsedSec/24/3600);
+        return str(R.string.fmt_period_n_d, elapsedSec/24/3600);
     }
 
     /** Describes a time in the past using a short phrase like "15 h ago". */
-    public static String describeTime(long timeMillis) {
+    public String describeTime(long timeMillis) {
         long elapsedMillis = Utils.getTime() - timeMillis;
-        if (elapsedMillis < 60000) return "just now";
-        else return describePeriod(elapsedMillis) + " ago";
+        if (elapsedMillis < 60000) return str(R.string.time_just_now);
+        else return str(R.string.fmt_time_dur_ago, describePeriod(elapsedMillis));
     }
 
     /** Describes a distance using a phrase like "150 m" or "7.3 km". */
@@ -304,6 +302,14 @@ public class Utils {
         this.activity = activity;
         this.context = activity;
     }
+    
+    public String str(int id) {
+        return context.getString(id);
+    }
+    
+    public String str(int id, Object... args) {
+        return Utils.format(str(id), args);
+    }
 
     public AlarmManager getAlarmManager() {
         return (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
@@ -407,6 +413,18 @@ public class Utils {
         int slots = 0;
         while (getSmsManager(slots) != null) slots++;
         return slots;
+    }
+
+    /** Gets the carrier name for a given SIM slot; returns null if no such slot. */
+    public String getCarrierName(int slot) {
+        if (android.os.Build.VERSION.SDK_INT >= 22) {
+            SubscriptionInfo sub = SubscriptionManager.from(context)
+                .getActiveSubscriptionInfoForSimSlotIndex(slot);
+            if (sub != null) {
+                return String.valueOf(sub.getCarrierName());
+            }
+        }
+        return slot == 0 ? getTelephonyManager().getNetworkOperatorName() : null;
     }
 
     /** Gets the SmsManager for a given SIM slot; returns null if no such slot. */

@@ -48,7 +48,7 @@ public class MainActivity extends BaseActivity {
         Utils.log(TAG, "onCreate");
         Fabric.with(this, new Crashlytics());
         setContentView(R.layout.activity_main);
-        setTitle("Fleet Reporter " + BuildConfig.VERSION_NAME);
+        setTitle(u.str(R.string.app_name) + " " + BuildConfig.VERSION_NAME);
 
         ActivityCompat.requestPermissions(this, new String[] {
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -153,19 +153,24 @@ public class MainActivity extends BaseActivity {
             String destination = u.getPref(Prefs.DESTINATION_NUMBER);
             String reporterId = u.getPref(Prefs.REPORTER_ID);
             if (!destination.isEmpty() && !reporterId.isEmpty()) {
+                String simList = "";
                 for (int slot = 0; slot < u.getNumSimSlots(); slot++) {
                     u.sendSms(slot, destination, "fleet activate " + reporterId);
+                    simList += "\n  \u2022 SIM " + (slot + 1) + ": " + u.getCarrierName(slot);
                 }
-                u.showMessageBox("Registering additional numbers", "Sent registration messages.");
+                u.showMessageBox(
+                    u.str(R.string.register_additional_numbers),
+                    u.str(R.string.sent_registration_messages_to) + "\n" + simList
+                );
             }
         }
         if (item.getItemId() == R.id.action_pause) {
             stopLocationService();
         }
         if (item.getItemId() == R.id.action_send_diagnostic_info) {
-            u.showMessageBox("Send diagnostic info",
-                "Please ensure a good Internet connection, then proceed.",
-                "Ready to proceed",
+            u.showMessageBox(u.str(R.string.send_diagnostic_info),
+                u.str(R.string.ensure_internet_instructions),
+                u.str(R.string.ready_to_proceed),
                 new Utils.Callback() {
                     @Override public void run() {
                         u.relaunchApp();
@@ -174,9 +179,9 @@ public class MainActivity extends BaseActivity {
             );
         }
         if (item.getItemId() == R.id.action_update) {
-            u.showMessageBox("Update app",
-                "Please ensure a good Internet connection, then proceed.",
-                "Ready to proceed",
+            u.showMessageBox(u.str(R.string.update_app),
+                u.str(R.string.ensure_internet_instructions),
+                u.str(R.string.ready_to_proceed),
                 new Utils.Callback() {
                     @Override public void run() {
                         u.setPref(Prefs.PLAY_STORE_REQUESTED, true);
@@ -207,15 +212,15 @@ public class MainActivity extends BaseActivity {
                     u.setText(R.id.sleep_mode_label, Utils.format("Sleep mode\n\n%s \u2013 %s", sleepStart, sleepEnd));
                     u.showFrameChild(R.id.sleep_mode_label);
                 } else {
-                    u.setText(R.id.mode_label, "Reporting as:");
+                    u.setText(R.id.mode_label, u.str(R.string.reporting_as_colon));
                     u.showFrameChild(R.id.reporting_frame);
                 }
             } else {
-                u.setText(R.id.mode_label, "Reporting is paused!");
+                u.setText(R.id.mode_label, u.str(R.string.reporting_is_paused));
                 u.showFrameChild(R.id.unpause_button);
             }
         } else {
-            u.setText(R.id.mode_label, "Not yet registered");
+            u.setText(R.id.mode_label, u.str(R.string.not_yet_registered));
             u.hide(R.id.reporter_label);
             u.showFrameChild(R.id.register_button);
         }
@@ -233,36 +238,36 @@ public class MainActivity extends BaseActivity {
         Long segmentMillis = s.getMillisSinceLastTransition();
         String distance = Utils.describeDistance(s.getMetersTravelledSinceStop());
         if (noGpsMillis != null || fix == null) {
-            u.setText(R.id.speed, "no GPS", 0xffe04020);
-            u.setText(R.id.speed_details, noGpsMillis == null ? "\n" : "no signal since\n" + Utils.describeTime(noGpsMillis));
+            u.setText(R.id.speed, u.str(R.string.no_gps), 0xffe04020);
+            u.setText(R.id.speed_details, noGpsMillis == null ? "\n" : u.str(R.string.no_gps_signal_since) + "\n" + u.describeTime(noGpsMillis));
         } else {
             u.setText(R.id.speed, Utils.format("%.0f km/h", fix.speedKmh), 0xff00a020);
             if (segmentMillis != null && segmentMillis >= 60 * 1000) {
-                String segmentPeriod = Utils.describePeriod(segmentMillis);
+                String segmentPeriod = u.describePeriod(segmentMillis);
                 u.setText(R.id.speed_details, s.isResting() ?
-                    "stopped here for\n" + segmentPeriod :
-                    distance + " in " + segmentPeriod + "\nsince last stop"
+                    u.str(R.string.stopped_here_for) + "\n" + segmentPeriod :
+                    u.str(R.string.fmt_dist_in_dur, distance, segmentPeriod) + "\n" + u.str(R.string.since_last_stop)
                 );
             } else {
                 u.setText(R.id.speed_details, s.isResting() ?
-                    "stopped\n" : "travelled " + distance + "\nsince last stop");
+                    u.str(R.string.stopped) + "\n" : u.str(R.string.fmt_travelled_dist, distance) + "\n" + u.str(R.string.since_last_stop));
             }
         }
 
         Long smsFailMillis = s.getSmsFailingSinceMillis();
         Long smsSentMillis = s.getLastSmsSentMillis();
         if (smsFailMillis != null) {
-            u.setText(R.id.sms, "no SMS", 0xffe04020);
+            u.setText(R.id.sms, u.str(R.string.no_sms), 0xffe04020);
             u.setText(R.id.sms_details,
                 smsSentMillis != null ?
-                "sent last report\n" + Utils.describeTime(smsSentMillis) :
-                "unable to send since\n" + Utils.describeTime(smsFailMillis));
+                u.str(R.string.sent_last_report) + "\n" + u.describeTime(smsSentMillis) :
+                u.str(R.string.unable_to_send_since) + "\n" + u.describeTime(smsFailMillis));
         } else if (smsSentMillis != null) {
             u.setText(R.id.sms, "SMS \u2713", 0xff00a020);
-            u.setText(R.id.sms_details, "sent last report\n" + Utils.describeTime(smsSentMillis));
+            u.setText(R.id.sms_details, u.str(R.string.sent_last_report) + "\n" + u.describeTime(smsSentMillis));
         } else {
-            u.setText(R.id.sms, "no SMS", 0xff808080);
-            u.setText(R.id.sms_details, "nothing sent yet\n");
+            u.setText(R.id.sms, u.str(R.string.no_sms), 0xff808080);
+            u.setText(R.id.sms_details, u.str(R.string.nothing_to_send_yet) + "\n");
         }
 
         Intent status = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -271,27 +276,31 @@ public class MainActivity extends BaseActivity {
             int scale = status.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
             int percent = 100 * level / scale;
             boolean isPlugged = status.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) != 0;
-            u.setText(R.id.battery, percent + "% battery", isPlugged ? 0xff00a020 : 0xffe04020);
-            u.setText(R.id.battery_details, isPlugged ? "power is connected" : "no power source ");
+            u.setText(R.id.battery, u.str(R.string.fmt_n_percent_battery, percent), isPlugged ? 0xff00a020 : 0xffe04020);
+            u.setText(R.id.battery_details, isPlugged ? u.str(R.string.power_is_connected) : u.str(R.string.no_power_source));
         } catch (NullPointerException e) {
-            u.setText(R.id.battery, "battery state unknown", 0xffe04020);
-            u.setText(R.id.battery_details, "x");
+            u.setText(R.id.battery, u.str(R.string.battery_state_unknown), 0xffe04020);
+            u.setText(R.id.battery_details, "");
         }
     }
 
     private void registerReporter() {
         String destinationNumber = u.getPref(Prefs.DESTINATION_NUMBER).trim();
         if (destinationNumber.isEmpty()) destinationNumber = mLastDestinationNumber;
-        if (destinationNumber.isEmpty()) destinationNumber = "+";
+        if (destinationNumber.isEmpty()) destinationNumber = "+236";
         u.promptForString(
-            "Registration",
-            "Receiver's mobile number:",
+            u.str(R.string.registration),
+            u.str(R.string.receivers_mobile_number_colon),
             destinationNumber,
             new Utils.StringCallback() {
                 public void run(String mobileNumber) {
                     if (mobileNumber == null) return;
                     mLastDestinationNumber = mobileNumber;
-                    u.sendSms(0, mobileNumber, "fleet register");
+                    try {
+                        u.sendSms(0, mobileNumber, "fleet register");
+                    } catch (IllegalArgumentException e) {
+                        u.showMessageBox(u.str(R.string.error), u.str(R.string.invalid_number));
+                    }
                 }
             }
         );
@@ -347,14 +356,9 @@ public class MainActivity extends BaseActivity {
                 mAccessibilityServicePrompt.dismiss();
             }
             mAccessibilityServicePrompt = u.showMessageBox(
-                "Settings change needed",
-                "Automatic purchasing of SMS credit requires a change " +
-                    "to your Accessibility settings.  On the next screen, please:\n" +
-                    "\n" +
-                    "  \u2022 Find \"Fleet Reporter\"\n" +
-                    "  \u2022 Enable it\n" +
-                    "  \u2022 Use the back button to return here",
-                "Open Settings",
+                u.str(R.string.settings_change_needed),
+                u.str(R.string.accessibility_service_instructions),
+                u.str(R.string.open_settings_button),
                 new Utils.Callback() {
                     @Override public void run() {
                         startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
