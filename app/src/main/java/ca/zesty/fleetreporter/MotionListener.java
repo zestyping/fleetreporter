@@ -85,7 +85,7 @@ public class MotionListener implements LocationFixListener {
                 mAnchor = fix;
             }
         } else {
-            Utils.logRemote(TAG, "Abandoned anchor: " + description);
+            if (mAnchor != null) Utils.logRemote(TAG, "Abandoned anchor: " + description);
             mAnchor = null;
             mSettlingStartMillis = null;
         }

@@ -209,7 +209,7 @@ public class MainActivity extends BaseActivity {
                 String sleepStart = u.getPref(Prefs.SLEEP_START);
                 String sleepEnd = u.getPref(Prefs.SLEEP_END);
                 if (Utils.isLocalTimeOfDayBetween(sleepStart, sleepEnd)) {
-                    u.setText(R.id.sleep_mode_label, Utils.format("Sleep mode\n\n%s \u2013 %s", sleepStart, sleepEnd));
+                    u.setText(R.id.sleep_mode_label, u.str(R.string.sleep_mode) + Utils.format("\n\n%s \u2013 %s", sleepStart, sleepEnd));
                     u.showFrameChild(R.id.sleep_mode_label);
                 } else {
                     u.setText(R.id.mode_label, u.str(R.string.reporting_as_colon));
