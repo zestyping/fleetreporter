@@ -31,7 +31,7 @@
   <string name="accessibility_service_instructions">Automatic purchasing of SMS credit requires a change to your Accessibility settings.  On the next screen, please:&#10;  • Find \"Fleet Reporter\"&#10;  • Enable it&#10;  • Use the Back button to return here</string>
   <string name="open_settings_button">Open Settings</string>
   <string name="register_additional_numbers">Register additional numbers</string>
-  <string name="sent_registration_messages_to">Sent registration messages.</string>
+  <string name="sent_registration_messages_to">Sent registration messages to the receiver from:</string>
   <string name="send_diagnostic_info">Send diagnostic info</string>
   <string name="ready_to_proceed">Ready to proceed</string>
   <string name="register">Register</string>

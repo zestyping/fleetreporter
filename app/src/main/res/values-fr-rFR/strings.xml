@@ -30,7 +30,7 @@
     <string name="accessibility_service_instructions">Automatisation de l\'achat des forfaits SMS nécessite une changement des paramètres d\'accessibilité.  Sur l\'écran suivant, s\'il vous plaît:&#10;  • Cherchez \"Fleet Reporter\"&#10;  • Veuillez l\'activer&#10;  • Utilisez le bouton Retour pour retourner ici.</string>
     <string name="open_settings_button">Ouvrir Paramètres</string>
     <string name="register_additional_numbers">Enregistrer numéros additionnels</string>
-    <string name="sent_registration_messages_to">Les messages d\'enregistrement sont envoyés.</string>
+    <string name="sent_registration_messages_to">Les messages d\'enregistrement sont envoyés au receveur par:</string>
     <string name="send_diagnostic_info">Envoyer infos diagnostique</string>
     <string name="ready_to_proceed">Prêt à proceder</string>
     <string name="register">Enregistrer</string>
