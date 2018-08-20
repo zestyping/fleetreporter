@@ -20,10 +20,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
 
-import com.crashlytics.android.Crashlytics;
-
-import io.fabric.sdk.android.Fabric;
-
 public class MainActivity extends BaseActivity {
     static final String TAG = "MainActivity";
     static final String ACTION_SMS_RECEIVED = "android.provider.Telephony.SMS_RECEIVED";
@@ -46,7 +42,7 @@ public class MainActivity extends BaseActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Utils.log(TAG, "onCreate");
-        Fabric.with(this, new Crashlytics());
+        Utils.initializeCrashlytics(this);
         setContentView(R.layout.activity_main);
         setTitle(u.str(R.string.app_name) + " " + BuildConfig.VERSION_NAME);
 

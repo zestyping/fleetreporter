@@ -49,6 +49,8 @@ import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.fabric.sdk.android.Fabric;
+
 public class Utils {
     static final String TAG = "Utils";
     static final TimeZone UTC = TimeZone.getTimeZone("UTC");
@@ -66,6 +68,7 @@ public class Utils {
 
     static int sNumLogRemoteLines = 0;
     static long sTimeOffsetMillis = 0;  // compensate for an inaccurate system clock
+    static boolean sCrashlyticsAvailable = false;
 
     public static void setTimeOffset(long offsetMillis) {
         sTimeOffsetMillis = offsetMillis;
@@ -258,10 +261,8 @@ public class Utils {
         String logLine = Utils.format("%s - %s: %s", timestamp, tag, message);
         if (remote) {
             Log.i(tag, "(logged to remote) " + message);
-            Crashlytics.log(logLine);
-            if (++sNumLogRemoteLines >= 100) {
-                Utils.transmitLog();
-            }
+            if (sCrashlyticsAvailable) Crashlytics.log(logLine);
+            if (++sNumLogRemoteLines >= 100) Utils.transmitLog();
         } else {
             Log.i(tag, message);
         }
@@ -287,13 +288,24 @@ public class Utils {
     }
 
     public static void transmitLog() {
-        try {
-            throw new RuntimeException("Diagnostic log");
-        } catch (RuntimeException e) {
-            Crashlytics.logException(e);
-            Log.i(TAG, "Captured Crashlytics diagnostic log (events: " + sNumLogRemoteLines + ")");
-            sNumLogRemoteLines = 0;
+        if (sCrashlyticsAvailable) {
+            try {
+                throw new RuntimeException("Diagnostic log");
+            } catch (RuntimeException e) {
+                Crashlytics.logException(e);
+                Log.i(TAG, "Captured Crashlytics diagnostic log (events: " + sNumLogRemoteLines + ")");
+                sNumLogRemoteLines = 0;
+            }
         }
+    }
+
+    public static void initializeCrashlytics(Context context) {
+        Fabric.with(context, new Crashlytics());
+        sCrashlyticsAvailable = true;
+    }
+
+    public static void setCrashlyticsString(String key, String value) {
+        if (sCrashlyticsAvailable) Crashlytics.setString(key, value);
     }
 
 
@@ -311,11 +323,11 @@ public class Utils {
         this.activity = activity;
         this.context = activity;
     }
-    
+
     public String str(int id) {
         return context.getString(id);
     }
-    
+
     public String str(int id, Object... args) {
         return Utils.format(str(id), args);
     }
@@ -460,7 +472,7 @@ public class Utils {
     }
 
     public String getPref(String key) {
-        return getPrefs().getString(key, "");
+        return getPref(key, "");
     }
 
     public String getPref(String key, String defaultValue) {

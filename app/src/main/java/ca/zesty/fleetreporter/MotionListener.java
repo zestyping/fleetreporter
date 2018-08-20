@@ -1,7 +1,5 @@
 package ca.zesty.fleetreporter;
 
-import android.content.Context;
-
 /** A LocationListener that estimates whether the GPS receiver is resting or
     moving, and converts each received Location to an appropriate Point.
  */
@@ -41,8 +39,8 @@ public class MotionListener implements LocationFixListener {
     private LocationFix mLastRestingFix = null;  // last fix that was in resting state
 
     /** Creates a MotionListener that sends Points to a PointListener. */
-    public MotionListener(Context context, PointListener target) {
-        u = new Utils(context);
+    public MotionListener(Utils utils, PointListener target) {
+        u = utils;
         mTarget = target;
     }
 

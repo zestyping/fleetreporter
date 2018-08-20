@@ -11,27 +11,25 @@ import static org.junit.Assert.assertEquals;
 public class MotionListenerTest implements PointListener {
     static final long SECOND = 1000;  // millis
     static final long MINUTE = 60000;  // millis
-    static final long SETTLING_PERIOD_MILLIS = 120 * SECOND;
+    static final long SETTLING_PERIOD_MILLIS = (long) (MotionListener.DEFAULT_SETTLING_PERIOD_MINUTES * MINUTE);
     static final long T0 = 1514764800_000L;  // 2018-01-01 00:00:00 UTC
     static final long T1 = T0 + SETTLING_PERIOD_MILLIS - 1;  // just before settling
     static final long T2 = T0 + SETTLING_PERIOD_MILLIS + 1;  // just after settling
     static final LocationFix L0 = new LocationFix(T0, 37, -122, 0, 0, 0, 12);
     static final LocationFix L0_NEAR = new LocationFix(T0, 37.00010, -122, 0, 0, 0, 12);
-    static final LocationFix L0_FAR = new LocationFix(T0, 37.00030, -122, 0, 0, 0, 12);
+    static final LocationFix L0_FAR = new LocationFix(T0, 37.00080, -122, 0, 0, 0, 12);
 
     private MotionListener ml;
     private final List<Point> points = new ArrayList<>();
 
     @Before public void setUp() {
         points.clear();
-        ml = new MotionListener(this, new Getter<Long>() {
-            public Long get() { return SETTLING_PERIOD_MILLIS; }
-        });
+        ml = new MotionListener(new FakeUtils(), this);
         simulateFix(L0, T0);
         assertMovingPoint("for the very first fix", L0, T0, T0);
     }
 
-    @Test public void testNearbyFixesWithinAndAfterSettlingPeriod() throws Exception {
+    @Test public void testNearbyFixesWithinAndAfterSettlingPeriod() {
         simulateFix(L0, T0 + 1);
         assertNoPoints("for a nearby fix within the settling period");
         simulateFix(L0, T1);
@@ -41,7 +39,7 @@ public class MotionListenerTest implements PointListener {
             L0, T0, T0);
     }
 
-    @Test public void testAdditionalNearbyFixesAfterStopped() throws Exception {
+    @Test public void testAdditionalNearbyFixesAfterStopped() {
         testNearbyFixesWithinAndAfterSettlingPeriod();
         simulateFix(L0, T2 + 1);
         assertRestingPoint("for each additional nearby fix after stopping",
@@ -54,20 +52,20 @@ public class MotionListenerTest implements PointListener {
             L0, T2 + 10000, T0);
     }
 
-    @Test public void testDepartureAfterStopped() throws Exception {
+    @Test public void testDepartureAfterStopped() {
         testNearbyFixesWithinAndAfterSettlingPeriod();
         simulateFix(L0_FAR, T2 + 1);
         assertGoPoint("retroactively, for a departing fix after stopping",
             L0, T2, T0);
     }
 
-    @Test public void testImmediateFarawayFix() throws Exception {
+    @Test public void testImmediateFarawayFix() {
         simulateFix(L0_FAR, T0 + 1);
         assertMovingPoint("for an immediate faraway fix",
             L0_FAR, T0 + 1, T0);
     }
 
-    @Test public void testFarawayFixWithinSettlingPeriod() throws Exception {
+    @Test public void testFarawayFixWithinSettlingPeriod() {
         simulateFix(L0_NEAR, T0 + 1);
         assertNoPoints("for a nearby fix within the settling period");
         simulateFix(L0_NEAR, T1 - 1);
@@ -77,7 +75,7 @@ public class MotionListenerTest implements PointListener {
             L0_FAR, T1, T0);
     }
 
-    @Test public void testFarawayFixAfterSettlingPeriod() throws Exception {
+    @Test public void testFarawayFixAfterSettlingPeriod() {
         simulateFix(L0_NEAR, T0 + 1);
         assertNoPoints("for a nearby fix within the settling period");
         simulateFix(L0_NEAR, T1);
@@ -87,7 +85,7 @@ public class MotionListenerTest implements PointListener {
             L0_FAR, T2, T0);
     }
 
-    @Test public void testMovingThenStopping() throws Exception {
+    @Test public void testMovingThenStopping() {
         simulateFix(L0_FAR, T1);
         assertMovingPoint("for a faraway fix within the settling period",
             L0_FAR, T1, T0);
@@ -112,28 +110,28 @@ public class MotionListenerTest implements PointListener {
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a resting point " + situation,
             new Point(fix.withTime(timeMillis), Point.Type.RESTING, lastTransitionMillis),
-            expectOnePoint());
+            expectOnePoint(situation));
     }
 
     private void assertGoPoint(
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a go point " + situation,
             new Point(fix.withTime(timeMillis), Point.Type.GO, lastTransitionMillis),
-            expectOnePoint());
+            expectOnePoint(situation));
     }
 
     private void assertMovingPoint(
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a moving point " + situation,
             new Point(fix.withTime(timeMillis), Point.Type.MOVING, lastTransitionMillis),
-            expectOnePoint());
+            expectOnePoint(situation));
     }
 
     private void assertStopPoint(
         String situation, LocationFix fix, long timeMillis, long lastTransitionMillis) {
         assertEquals("MotionListener should emit a stop point " + situation,
             new Point(fix.withTime(timeMillis), Point.Type.STOP, lastTransitionMillis),
-            expectOnePoint());
+            expectOnePoint(situation));
     }
 
     @Override public void onPoint(Point point, boolean isProvisional) {
@@ -141,8 +139,8 @@ public class MotionListenerTest implements PointListener {
         System.out.println("Point: " + point);
     }
 
-    public Point expectOnePoint() {
-        assertEquals(1, points.size());
+    public Point expectOnePoint(String situation) {
+        assertEquals("MotionListener should emit a single point " + situation, 1, points.size());
         Point point = points.get(0);
         points.remove(0);
         return point;

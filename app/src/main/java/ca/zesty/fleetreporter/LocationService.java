@@ -19,14 +19,11 @@ import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.crashlytics.android.Crashlytics;
-
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Comparator;
 import java.util.List;
 import java.util.SortedMap;
@@ -34,14 +31,12 @@ import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import io.fabric.sdk.android.Fabric;
-
 /** A foreground service that records the device's GPS location and periodically
     reports it via SMS to the Fleet Map device.
 
     Each Point passes through the following stages on the way to becoming
     an outgoing message to the server:
-   
+
     LocationManager
         |
         |   mMotionListener.onLocation() (~ once every LOCATION_INTERVAL_MILLIS)
@@ -158,7 +153,7 @@ public class LocationService extends BaseService implements PointListener {
     @Override public void onCreate() {
         super.onCreate();
         Utils.log(TAG, "onCreate");
-        Fabric.with(this, new Crashlytics());
+        Utils.initializeCrashlytics(this);
         mHandler = new Handler();
         mRunnable = new Runnable() {
             public void run() {
@@ -177,7 +172,7 @@ public class LocationService extends BaseService implements PointListener {
         registerReceiver(mLowCreditReceiver, new IntentFilter(SmsReceiver.ACTION_LOW_CREDIT));
         mWakeLock = u.getPowerManager().newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "LocationService");
-        mLocationAdapter = new LocationAdapter(this, new MotionListener(this, this));
+        mLocationAdapter = new LocationAdapter(this, new MotionListener(u, this));
         mNmeaListener = new NmeaListener();
         mPrefsListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
             @Override public void onSharedPreferenceChanged(SharedPreferences preferences, String s) {
@@ -188,8 +183,8 @@ public class LocationService extends BaseService implements PointListener {
 
     /** Starts running the service. */
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        Crashlytics.setString("reporter_id", u.getPref(Prefs.REPORTER_ID));
-        Crashlytics.setString("reporter_label", u.getPref(Prefs.REPORTER_LABEL));
+        Utils.setCrashlyticsString("reporter_id", u.getPref(Prefs.REPORTER_ID));
+        Utils.setCrashlyticsString("reporter_label", u.getPref(Prefs.REPORTER_LABEL));
 
         if (u.getBooleanPref(Prefs.RUNNING)) {
             // Set an alarm to restart this service, in case it crashes.
@@ -257,7 +252,7 @@ public class LocationService extends BaseService implements PointListener {
                 }
                 if (verbose) Utils.logRemote(TAG, key + ": " + value);
                 else Utils.log(TAG, key + ": " + value);
-                Crashlytics.setString(key, "" + value);
+                Utils.setCrashlyticsString(key, "" + value);
             }
         } catch (Exception e) {
             Utils.logRemote(TAG, "Problem setting keys: " + e);
@@ -802,18 +797,6 @@ public class LocationService extends BaseService implements PointListener {
                     mLocationAdapter.onGpsSignalLost();
                 }
             }
-        }
-    }
-
-    class SettlingPeriodGetter implements Getter<Long> {
-        public Long get() {
-            double minutes;
-            try {
-                minutes = Double.parseDouble(u.getPref(Prefs.SETTLING_PERIOD));
-            } catch (NumberFormatException e) {
-                return DEFAULT_SETTLING_PERIOD_MILLIS;
-            }
-            return Math.round(minutes * 60 * 1000);
         }
     }
 }
