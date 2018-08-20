@@ -180,7 +180,7 @@ public class MainActivity extends BaseActivity {
             stopLocationService();
         }
         if (item.getItemId() == R.id.action_send_diagnostics) {
-            u.showMessageBox(u.str(R.string.send_diagnostics),
+            u.showConfirmBox(u.str(R.string.send_diagnostics),
                 u.str(R.string.ensure_internet_instructions),
                 u.str(R.string.ready_to_proceed),
                 new Utils.Callback() {
@@ -191,7 +191,7 @@ public class MainActivity extends BaseActivity {
             );
         }
         if (item.getItemId() == R.id.action_update) {
-            u.showMessageBox(u.str(R.string.update_app),
+            u.showConfirmBox(u.str(R.string.update_app),
                 u.str(R.string.ensure_internet_instructions),
                 u.str(R.string.ready_to_proceed),
                 new Utils.Callback() {
@@ -375,7 +375,7 @@ public class MainActivity extends BaseActivity {
             if (mAccessibilityServicePrompt != null) {
                 mAccessibilityServicePrompt.dismiss();
             }
-            mAccessibilityServicePrompt = u.showMessageBox(
+            mAccessibilityServicePrompt = u.showConfirmBox(
                 u.str(R.string.settings_change_needed),
                 u.str(R.string.accessibility_service_instructions),
                 u.str(R.string.open_settings_button),

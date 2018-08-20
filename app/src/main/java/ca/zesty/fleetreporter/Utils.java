@@ -32,16 +32,22 @@ import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.crashlytics.android.Crashlytics;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -100,6 +106,14 @@ public class Utils {
         return (count == 1) ? "" : "s";
     }
 
+    public static String join(String separator, Collection<String> elements) {
+        String result = "";
+        for (String element : elements) {
+            result += (result.isEmpty() ? "" : separator) + element;
+        }
+        return result;
+    }
+
     public static long clamp(long min, long max, long value) {
         return (value < min) ? min : (value > max) ? max : value;
     }
@@ -154,11 +168,18 @@ public class Utils {
         return RFC3339_UTC_MILLIS.format(new Date(timeMillis));
     }
 
+    public static String formatLocalTimeOfDay(long timeMillis) {
+        SimpleDateFormat format = new SimpleDateFormat("HH:mm", Locale.US);
+        format.setTimeZone(TimeZone.getDefault());
+        return format.format(new Date(timeMillis));
+    }
+
     /** Parses an RFC3339 timestamp in UTC to give a time in milliseconds, or null. */
     public static Long parseTimestamp(String timestamp) {
         Matcher matcher = PATTERN_TIMESTAMP.matcher(timestamp);
         if (!matcher.matches()) return null;
         Calendar calendar = Calendar.getInstance(UTC);
+        calendar.clear();
         calendar.set(
             Integer.parseInt(matcher.group(1)),
             Integer.parseInt(matcher.group(2)) - 1, // Java is insane (0 = Jan, 11 = Dec)
@@ -272,6 +293,67 @@ public class Utils {
         }
     }
 
+    public static File getExternalDirectory() {
+        try {
+            return Environment.getExternalStorageDirectory();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    public static File getDownloadDirectory() {
+        try {
+            return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    public static boolean copyFile(File source, File target) {
+        try {
+            InputStream in = new FileInputStream(source);
+            try {
+                OutputStream out = new FileOutputStream(target);
+                try {
+                    byte[] buffer = new byte[1024];
+                    int len;
+                    while ((len = in.read(buffer)) > 0) {
+                        out.write(buffer, 0, len);
+                    }
+                } finally {
+                    out.close();
+                }
+            } finally {
+                in.close();
+            }
+        } catch (IOException e) {
+            Log.i(TAG, "Failed to copy " + source + " to " + target + ": " + e);
+            return false;
+        }
+        Log.i(TAG, "Copied " + source + " to " + target);
+        return true;
+    }
+
+    public static boolean moveFile(File source, File target) {
+        if (source.renameTo(target)) {
+            Log.i(TAG, "Moved " + source + " to " + target);
+            return true;
+        } else {
+            Log.i(TAG, "Failed to move " + source + " to " + target);
+            return false;
+        }
+    }
+
+    public static boolean deleteFile(File file) {
+        if (file.delete()) {
+            Log.i(TAG, "Deleted " + file);
+            return true;
+        } else {
+            Log.i(TAG, "Failed to delete " + file);
+            return false;
+        }
+    }
+
     public static void log(String tag, String message, Object... args) {
         logHelper(tag, args.length > 0 ? Utils.format(message, args) : message, false);
     }
@@ -290,14 +372,9 @@ public class Utils {
         } else {
             Log.i(tag, message);
         }
-        String filename = Utils.format("fleetreporter-%s.txt", timestamp.substring(0, 10));
-        File directory;
-        try {
-            directory = Environment.getExternalStorageDirectory();
-        } catch (RuntimeException e) {
-            // Fails during testing because getExternalStorageDirectory() is not mocked.
-            return;
-        }
+        String filename = Utils.format("%s-%s.txt", BuildConfig.APPLICATION_ID, timestamp.substring(0, 10));
+        File directory = getExternalDirectory();
+        if (directory == null) return;  // fails during testing due to lack of mocks
         File file = new File(directory, filename);
         try {
             FileWriter writer = new FileWriter(file, true);
@@ -455,7 +532,7 @@ public class Utils {
         if (number == null && slot == 0) {
             number = getTelephonyManager().getLine1Number();
         }
-        return number != null ? "+" + number.replaceAll("^\\+*", "") : null;
+        return (number == null || number.isEmpty()) ? null : "+" + number.replaceAll("^\\+*", "");
     }
 
     public int getNumSimSlots() {
@@ -644,12 +721,17 @@ public class Utils {
         child.setVisibility(View.VISIBLE);
     }
 
-    /** Shows a message box with a single button that invokes the given listener. */
-    public AlertDialog showMessageBox(String title, String message, String buttonLabel, final Callback callback) {
+    public void showToast(String message) {
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show();
+    }
+
+    /** Shows a message box with a cancel button and a button that invokes the given listener. */
+    public AlertDialog showConfirmBox(String title, String message, String buttonLabel, final Callback callback) {
         return new AlertDialog.Builder(context)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton(buttonLabel, callback == null ? null : new DialogInterface.OnClickListener() {
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton(buttonLabel, new DialogInterface.OnClickListener() {
                 @Override public void onClick(DialogInterface dialog, int which) {
                     callback.run();
                 }
@@ -657,9 +739,13 @@ public class Utils {
             .show();
     }
 
-    /** Shows a simple message box with an OK button. */
-    public void showMessageBox(String title, String message) {
-        showMessageBox(title, message, "OK", null);
+    /** Shows a message box with a single OK button. */
+    public AlertDialog showMessageBox(String title, String message) {
+        return new AlertDialog.Builder(context)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show();
     }
 
     /** Shows a simple prompt dialog with a single text entry field. */
