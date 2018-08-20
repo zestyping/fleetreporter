@@ -45,6 +45,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -87,6 +88,10 @@ public class Utils {
         return str.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n");
     }
 
+    public static String quoteString(String str) {
+        return "\"" + escapeString(str).replace("\"", "\\\"") + "\"";
+    }
+
     public static String plural(long count, String singular, String plural) {
         return (count == 1) ? singular : plural;
     }
@@ -118,6 +123,25 @@ public class Utils {
             array[i] = list.get(i);
         }
         return array;
+    }
+
+    public static String generateRandomString(int length) {
+        Random random = new Random(System.currentTimeMillis());
+        String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        String result = "";
+        for (int i = 0; i < length; i++) {
+            int index = random.nextInt(alphabet.length());
+            result = result + alphabet.substring(index, index + 1);
+        }
+        return result;
+    }
+
+    public static String generateExchangeId() {
+        return "X" + generateRandomString(11);
+    }
+
+    public static String generateReporterId() {
+        return "R" + generateRandomString(11);
     }
 
     /** Formats a time as an RFC3339 timestamp in UTC of exactly 20 characters. */
@@ -440,6 +464,15 @@ public class Utils {
         return slots;
     }
 
+    /** Finds the SIM slot with a given IMSI; returns -1 if no such slot. */
+    public int getSlotWithImsi(String imsi) {
+        if (imsi == null) return -1;
+        for (int slot = 0; slot < getNumSimSlots(); slot++) {
+            if (imsi.equals(getImsi(slot))) return slot;
+        }
+        return -1;
+    }
+
     /** Gets the carrier name for a given SIM slot; returns null if no such slot. */
     public String getCarrierName(int slot) {
         if (android.os.Build.VERSION.SDK_INT >= 22) {
@@ -479,6 +512,20 @@ public class Utils {
         return getPrefs().getString(key, defaultValue);
     }
 
+    public String getStringPref(String key) {
+        try { return getPref(key); }
+        catch (Exception e) { }
+        try { return "" + getBooleanPref(key); }
+        catch (Exception e) { }
+        try { return "" + getLongPref(key, -1); }
+        catch (Exception e) { }
+        try { return "" + getIntPref(key, -1); }
+        catch (Exception e) { }
+        try { return "" + getFloatPref(key, -1); }
+        catch (Exception e) { }
+        return "";
+    }
+
     public boolean getBooleanPref(String key) {
         return getBooleanPref(key, false);
     }
@@ -498,6 +545,17 @@ public class Utils {
         } catch (ClassCastException e) { }
         try {
             value = Integer.parseInt(getPrefs().getString(key, "x"));
+        } catch (ClassCastException | NumberFormatException e) { }
+        return value;
+    }
+
+    public long getLongPref(String key, long defaultValue) {
+        long value = defaultValue;
+        try {
+            return getPrefs().getLong(key, defaultValue);
+        } catch (ClassCastException e) { }
+        try {
+            value = Long.parseLong(getPrefs().getString(key, "x"));
         } catch (ClassCastException | NumberFormatException e) { }
         return value;
     }

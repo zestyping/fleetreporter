@@ -32,7 +32,8 @@
   <string name="open_settings_button">Open Settings</string>
   <string name="register_additional_numbers">Register additional numbers</string>
   <string name="sent_registration_messages_to">Sent registration messages to the receiver from:</string>
-  <string name="send_diagnostic_info">Send diagnostic info</string>
+  <string name="send_diagnostics">Send diagnostics</string>
+  <string name="fmt_send_diagnostics_n_left">Send diagnostics (%d left)</string>
   <string name="ready_to_proceed">Ready to proceed</string>
   <string name="register">Register</string>
   <string name="pause_reporting">Pause reporting</string>

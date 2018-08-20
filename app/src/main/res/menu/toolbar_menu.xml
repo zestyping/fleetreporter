@@ -21,8 +21,8 @@
       app:showAsAction="never"/>
 
   <item
-      android:id="@+id/action_send_diagnostic_info"
-      android:title="@string/send_diagnostic_info"
+      android:id="@+id/action_send_diagnostics"
+      android:title="@string/send_diagnostics"
       app:showAsAction="never"/>
 
     <item

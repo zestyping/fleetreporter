@@ -238,18 +238,7 @@ public class LocationService extends BaseService implements PointListener {
     private void logPrefs(boolean verbose) {
         try {
             for (String key : Prefs.KEYS) {
-                Object value = null;
-                try { value = u.getPref(key); }
-                catch (Exception e) {
-                    try { value = u.getBooleanPref(key); }
-                    catch (Exception ee) {
-                        try { value = u.getIntPref(key, -1); }
-                        catch (Exception eee) {
-                            try { value = u.getFloatPref(key, -1); }
-                            catch (Exception eeee) { }
-                        }
-                    }
-                }
+                String value = u.getStringPref(key);
                 if (verbose) Utils.logRemote(TAG, key + ": " + value);
                 else Utils.log(TAG, key + ": " + value);
                 Utils.setCrashlyticsString(key, "" + value);

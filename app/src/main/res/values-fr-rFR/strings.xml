@@ -31,7 +31,8 @@
     <string name="open_settings_button">Ouvrir les paramètres</string>
     <string name="register_additional_numbers">Enregistrer numéros additionnels</string>
     <string name="sent_registration_messages_to">Les messages d\'enregistrement sont envoyés au receveur par:</string>
-    <string name="send_diagnostic_info">Envoyer infos diagnostique</string>
+    <string name="send_diagnostics">Envoyer infos diagnostique</string>
+    <string name="fmt_send_diagnostics_n_left">Envoyer infos diagnostique (%d restants)</string>
     <string name="ready_to_proceed">Prêt à proceder</string>
     <string name="register">Enregistrer</string>
     <string name="pause_reporting">Pause les rapports</string>

@@ -38,6 +38,7 @@ public class MainActivity extends BaseActivity {
     private int mLastAccessibilityServiceCheckMinutes = Utils.getLocalMinutesSinceMidnight();
     private Handler mHandler = null;
     private Runnable mRunnable = null;
+    private SmsHistoryUploader mSmsUploader = null;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -52,6 +53,7 @@ public class MainActivity extends BaseActivity {
             Manifest.permission.CALL_PHONE,
             Manifest.permission.INTERNET,
             Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_SMS,
             Manifest.permission.RECEIVE_BOOT_COMPLETED,
             Manifest.permission.RECEIVE_SMS,
             Manifest.permission.SEND_SMS,
@@ -59,6 +61,7 @@ public class MainActivity extends BaseActivity {
             Manifest.permission.WRITE_EXTERNAL_STORAGE
         }, 0);
 
+        populateReporterId();
         promptUserToEnableAccessibilityService();
 
         findViewById(R.id.register_button).setOnClickListener(
@@ -82,6 +85,10 @@ public class MainActivity extends BaseActivity {
         registerReceiver(mServiceChangedReceiver, new IntentFilter(LocationService.ACTION_SERVICE_CHANGED));
         registerReceiver(mAssignmentReceiver, new IntentFilter(SmsReceiver.ACTION_REPORTER_ASSIGNED));
 
+        mSmsUploader = new SmsHistoryUploader(
+            u.getPref(Prefs.REPORTER_ID) + "/" + u.getPref(Prefs.REPORTER_LABEL),
+            u, getContentResolver());
+
         // Some elements of the display show elapsed time, so we need to
         // periodically update the display even if there are no new events.
         mHandler = new Handler();
@@ -90,6 +97,7 @@ public class MainActivity extends BaseActivity {
                 updateUiMode();
                 updateReportingFrame();
                 checkWhetherToPromptUserToEnableAccessibilityService();
+                mSmsUploader.start();
                 mHandler.postDelayed(mRunnable, DISPLAY_INTERVAL_MILLIS);
             }
         };
@@ -105,6 +113,11 @@ public class MainActivity extends BaseActivity {
                 startLocationService();
             }
         }
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        mSmsUploader.sendPrefs();
     }
 
     @Override protected void onResume() {
@@ -138,6 +151,9 @@ public class MainActivity extends BaseActivity {
 
     @Override public boolean onPrepareOptionsMenu(Menu menu) {
         menu.findItem(R.id.action_register_additional_numbers).setEnabled(isRegistered());
+        menu.findItem(R.id.action_send_diagnostics).setTitle(
+            u.str(R.string.fmt_send_diagnostics_n_left, mSmsUploader.countRemaining())
+        );
         return true;
     }
 
@@ -163,8 +179,8 @@ public class MainActivity extends BaseActivity {
         if (item.getItemId() == R.id.action_pause) {
             stopLocationService();
         }
-        if (item.getItemId() == R.id.action_send_diagnostic_info) {
-            u.showMessageBox(u.str(R.string.send_diagnostic_info),
+        if (item.getItemId() == R.id.action_send_diagnostics) {
+            u.showMessageBox(u.str(R.string.send_diagnostics),
                 u.str(R.string.ensure_internet_instructions),
                 u.str(R.string.ready_to_proceed),
                 new Utils.Callback() {
@@ -190,6 +206,12 @@ public class MainActivity extends BaseActivity {
             startActivity(new Intent(this, SettingsActivity.class));
         }
         return false;
+    }
+
+    void populateReporterId() {
+        if (u.getPref(Prefs.REPORTER_ID).isEmpty()) {
+            u.setPref(Prefs.REPORTER_ID, Utils.generateReporterId());
+        }
     }
 
     private boolean isRegistered() {
@@ -293,7 +315,9 @@ public class MainActivity extends BaseActivity {
                     if (mobileNumber == null) return;
                     mLastDestinationNumber = mobileNumber;
                     try {
-                        u.sendSms(0, mobileNumber, "fleet register");
+                        for (int slot = 0; slot < u.getNumSimSlots(); slot++) {
+                            u.sendSms(slot, mobileNumber, "fleet register");
+                        }
                     } catch (IllegalArgumentException e) {
                         u.showMessageBox(u.str(R.string.error), u.str(R.string.invalid_number));
                     }
